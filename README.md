@@ -73,7 +73,7 @@ deadline passes? `expire()` → `refund()` (pull pattern, per contributor).
 `commitWithSecret()` — the secret lives in the share-link `#fragment` (never
 sent to servers), the chain stores only its hash. Verified on testnet: open
 commit reverts (`PrivateUseSecret`), keyed commit lands.
-Security properties, all covered by `forge test` (**14/14 green**): one commit
+Security properties, all covered by `forge test` (**16/16 green**): one commit
 per address; organizer cannot touch funds pre-tilt; **fee (1%, capped 5%) is read
 from the factory onchain — callers cannot waive it**; ReentrancyGuard +
 checks-effects throughout; pot titles capped at 120 bytes.
