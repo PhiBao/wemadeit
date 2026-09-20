@@ -1,0 +1,17 @@
+{
+  "name": "WeMadeIt — group pots on Monad",
+  "short_name": "WeMadeIt",
+  "description": "Money only moves if the group means it. Conditional group pots with Face ID login and AUSD settlement.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f4ec",
+  "theme_color": "#065f46",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

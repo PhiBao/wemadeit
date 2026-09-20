@@ -55,10 +55,10 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { formatEther } from "viem";
+import { formatUnits } from "viem";
 import { potAbi, erc20Abi } from "../../../lib/abi";
 import { AppChainId, useAppChain } from "../../../lib/app-chain";
-import { chainFor } from "../../../lib/monad";
+import { chainFor, decimalsForToken, symbolFor } from "../../../lib/monad";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 
@@ -170,11 +170,14 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     ];
   const locked = !!priv;
   const isOrganizer = !!viewer && !!org && viewer.toLowerCase() === org.toLowerCase();
+  const dec = decimalsForToken(token ?? ZERO);
+  const sym = symbolFor(token ?? ZERO);
+  const human = (v: bigint) => formatUnits(v, dec);
   // Pre-title pots (v1) have no title() — fall back to stake × size.
   const displayTitle =
     potTitle ||
     (perPerson !== undefined && size !== undefined
-      ? `${formatEther(perPerson)} ${token === ZERO ? "MON" : "tokens"} × ${size.toString()}`
+      ? `${human(perPerson)} ${sym} × ${size.toString()}`
       : "");
   useEffect(() => {
     if (displayTitle) rememberPot(viewedId, pot, { title: displayTitle });
@@ -248,7 +251,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
         <LegitBadge
           pot={pot}
           title={displayTitle}
-          perPerson={formatEther(perPerson)}
+          perPerson={human(perPerson)}
           size={size.toString()}
         />{" "}
         <a href={explorer} target="_blank" className="underline">
@@ -264,7 +267,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
             <span className="text-2xl text-gray-500">/{size.toString()}</span>
           </p>
           <p className="text-right text-sm">
-            {formatEther(perPerson)} {isNative ? "MON" : "tokens"} each
+            {human(perPerson)} {sym} each
             <br />
             {expired ? "deadline passed" : `${Math.floor(left / 3600)}h ${Math.floor((left % 3600) / 60)}m left`}
           </p>
@@ -354,7 +357,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
               disabled={isPending || pkBusy || checking}
               className="rounded-xl bg-emerald-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
             >
-                {isPending || pkBusy || checking ? "Committing…" : `Commit ${formatEther(perPerson)} MON`}
+                {isPending || pkBusy || checking ? "Committing…" : `Commit ${human(perPerson)} ${sym}`}
             </button>
           ) : (
             <Erc20Commit
@@ -379,7 +382,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
           >
             {isPending || pkBusy || checking
               ? "Releasing…"
-              : `Release ${formatEther(perPerson * size)} to organizer`}
+              : `Release ${human(perPerson * size)} ${sym} to organizer`}
           </button>
         ) : state === 0 && expired ? (
           <ExpireRefund

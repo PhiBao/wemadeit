@@ -10,8 +10,8 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { formatEther, isAddress, parseEther } from "viem";
-import { ausdAddress, POT_BOUNDS } from "../lib/monad";
+import { formatUnits, isAddress, parseUnits } from "viem";
+import { ausdFor, decimalsForToken, symbolFor, POT_BOUNDS } from "../lib/monad";
 import { useAppChain } from "../lib/app-chain";
 import { factoryAbi, potAbi } from "../lib/abi";
 import PasskeyConnect from "../components/PasskeyConnect";
@@ -31,7 +31,7 @@ const ZERO = "0x0000000000000000000000000000000000000000" as const;
 export default function Home() {
   const router = useRouter();
   const { appChainId, factory } = useAppChain();
-  const ausd = ausdAddress();
+  const ausd = ausdFor(appChainId);
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
 
@@ -123,7 +123,9 @@ export default function Home() {
     const me = (payee || address || meraAddr!) as `0x${string}`;
     const args = {
       token: tokenAddr,
-      perPerson: parseEther(amount),
+      // AUSD uses 6 decimals, MON 18 — parseUnits with the token's scale so
+      // "25" means twenty-five dollars, not 25e18 base units.
+      perPerson: parseUnits(amount, decimalsForToken(tokenAddr)),
       partySize: BigInt(partySize),
       deadline,
       payee: me,
@@ -652,12 +654,13 @@ function PublicFeed({
       if (viewer && typeof r[7] === "string" && r[7].toLowerCase() === viewer.toLowerCase()) continue;
       if (viewer && r[8] === true) continue;
       const size = r[2] ?? 0n;
+      const tok = r[6] ?? ZERO;
       out.push({
         addr: addrs[i],
         title:
           r[0] ??
           (r[5] !== undefined
-            ? `${formatEther(r[5])} ${r[6] === ZERO ? "MON" : "tokens"} × ${size.toString()}`
+            ? `${formatUnits(r[5], decimalsForToken(tok))} ${symbolFor(tok)} × ${size.toString()}`
             : "Group pot"),
         count: r[1] ?? 0n,
         size,

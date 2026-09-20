@@ -97,8 +97,33 @@ export function deployBlockFor(chainId: number): bigint {
   return DEPLOY_BLOCKS[chainId as keyof typeof DEPLOY_BLOCKS] ?? 0n;
 }
 
-/** AUSD on Monad mainnet (LayerZero OFT). Null until configured per env. */
-export function ausdAddress(): `0x${string}` | null {
-  const a = process.env.NEXT_PUBLIC_AUSD_ADDRESS;
-  return a && a.startsWith("0x") ? (a as `0x${string}`) : null;
+/**
+ * Canonical AUSD (Agora USD, LayerZero OFT, 6 decimals) per chain.
+ * Source: https://docs.agora.finance/developer/contract-deployments
+ */
+const AUSD: Record<number, `0x${string}`> = {
+  [monadMainnet.id]: "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a",
+  [monadTestnet.id]: "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC",
+};
+
+export function ausdFor(chainId: number): `0x${string}` | null {
+  return AUSD[chainId] ?? null;
+}
+
+/** Display/scale decimals: native MON 18, AUSD 6, unknown ERC20s default 18. */
+export function decimalsForToken(token: string): number {
+  const t = token.toLowerCase();
+  for (const a of Object.values(AUSD)) {
+    if (a.toLowerCase() === t) return 6;
+  }
+  return 18;
+}
+
+export function symbolFor(token: string): string {
+  if (/^0x0+$/.test(token)) return "MON";
+  const t = token.toLowerCase();
+  for (const a of Object.values(AUSD)) {
+    if (a.toLowerCase() === t) return "AUSD";
+  }
+  return "tokens";
 }
