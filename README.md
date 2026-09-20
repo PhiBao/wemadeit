@@ -131,9 +131,15 @@ holds — WeMadeIt is cheaper *and* non-custodial.
 
 ## Bounty alignment
 
-Mera UX + One-Passkey-Many-Keys (FaceID flow) · Dynamic (embedded wallets) ·
-Envio (indexer) · Agora (AUSD pots) · MetaMask/Nansen-compatible (standard
-wagmi + explorer-verified contracts).
+- **Agora $10k cross-border payments:** AUSD pots are live — canonical AUSD on
+  mainnet (`0x0000…9012a`) and testnet (`0xa901…22dC`), 6-decimal math handled
+  end to end (create/approve/commit/display), FaceID onboarding, instant
+  settlement on Monad. Verified: 25-AUSD pot created + committed on testnet.
+  Any organizer anywhere collects borderless dollars; contributors join with
+  one tap and no seed phrase.
+- Mera UX + One-Passkey-Many-Keys (FaceID flow) · Dynamic (embedded wallets) ·
+  Envio (indexer) · MetaMask/Nansen-compatible (standard wagmi +
+  explorer-verified contracts).
 
 ## Run locally
 
