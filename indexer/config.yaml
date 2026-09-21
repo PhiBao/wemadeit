@@ -33,7 +33,7 @@ contracts:
       - event: "RefundingOpened(address indexed pot)"
       - event: "Refunded(address indexed pot, address indexed user, uint256 amount)"
       - event: "SecretRotated(address indexed pot)"
-networks:
+chains:
   - id: 143 # Monad mainnet
     start_block: 105639807
     contracts:

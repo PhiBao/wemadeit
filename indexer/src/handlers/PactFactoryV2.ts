@@ -1,16 +1,14 @@
-// @ts-ignore — generated ReScript has no TS declarations (see Handlers.gen.ts for types)
-// eslint-disable-next-line
-import { PactFactoryV2 } from "../../generated/src/Handlers.res.js";
+import { indexer, type Pot } from "envio";
 
 // V2/V4 factories (8-field PotCreated: has title, predates isPrivate).
-PactFactoryV2.PotCreated.contractRegister(({ event, context }: any) => {
-  context.addPactPot(event.params.pot);
+indexer.contractRegister({ contract: "PactFactoryV2", event: "PotCreated" }, ({ event, context }) => {
+  context.chain.PactPot.add(event.params.pot);
 });
 
-PactFactoryV2.PotCreated.handler(async ({ event, context }: any) => {
+indexer.onEvent({ contract: "PactFactoryV2", event: "PotCreated" }, async ({ event, context }) => {
   const id = `${event.chainId}-${event.params.pot.toLowerCase()}`;
   const existing = await context.Pot.get(id);
-  await context.Pot.set({
+  const pot: Pot = {
     id,
     chainId: BigInt(event.chainId),
     address: event.params.pot.toLowerCase(),
@@ -26,5 +24,6 @@ PactFactoryV2.PotCreated.handler(async ({ event, context }: any) => {
     commitCount: existing?.commitCount ?? 0n,
     createdAt: BigInt(event.block.timestamp),
     createdTx: event.transaction.hash,
-  });
+  };
+  await context.Pot.set(pot);
 });
