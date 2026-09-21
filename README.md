@@ -137,7 +137,7 @@ holds — WeMadeIt is cheaper *and* non-custodial.
   settlement on Monad. Verified: 25-AUSD pot created + committed on testnet.
   Any organizer anywhere collects borderless dollars; contributors join with
   one tap and no seed phrase.
-- **Envio (indexer, `indexer/`):** HyperIndex tracks all six factory generations
+- **Envio (indexer, `indexer/`) — live on Envio Cloud.
   on both chains with dynamic clone registration (`contractRegister` on
   `PotCreated` → every pot's commits/tilts/refunds indexed, three `PotCreated`
   shapes covered). The public feed reads one Envio GraphQL query instead of
