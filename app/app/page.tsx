@@ -10,6 +10,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
+import { keepPreviousData } from "@tanstack/react-query";
 import { formatUnits, isAddress, parseUnits } from "viem";
 import { ausdFor, decimalsForToken, symbolFor, POT_BOUNDS } from "../lib/monad";
 import { useAppChain } from "../lib/app-chain";
@@ -661,7 +662,8 @@ function PublicFeed({
           : { address: a as `0x${string}`, abi: potAbi, functionName, chainId }
       )
     ),
-    query: { enabled: addrs.length > 0 },
+    // Hold the last good set across refetches so the list never flashes.
+    query: { enabled: addrs.length > 0, placeholderData: keepPreviousData },
   });
 
   const cards: FeedCard[] = useMemo(() => {
@@ -702,14 +704,23 @@ function PublicFeed({
     return out;
   }, [data, addrs, viewer]);
 
-  // Envio-sourced cards replace the RPC set wholesale when available.
-  const base = envioCards ?? cards;
+  // Union: Envio first, RPC fills whatever it misses (notably while Cloud
+  // backfills — an empty Envio answer means "not synced yet", never "no pots").
+  // Dedupe by address so the two sources can never double-list.
+  const base = useMemo(() => {
+    if (envioCards === null) return cards;
+    const seen = new Set(envioCards.map((c) => c.addr.toLowerCase()));
+    return [...envioCards, ...cards.filter((c) => !seen.has(c.addr.toLowerCase()))];
+  }, [envioCards, cards]);
   const shown = base.filter((c) => {
     if (filter === "filling" && !(c.state === 0 && c.count < c.size)) return false;
     if (filter === "tilted" && c.state !== 1) return false;
     if (q && !c.title.toLowerCase().includes(q.toLowerCase())) return false;
     // Your pots live in Your pots — Public is for discovery, not duplicates.
+    // Covers organizer/member via chain data AND via this device's vault.
     if (viewer && c.organizer && c.organizer.toLowerCase() === viewer.toLowerCase()) return false;
+    const ve = vaultEntry(chainId, c.addr);
+    if (ve && (ve.role === "organizer" || ve.role === "member")) return false;
     return true;
   });
 
