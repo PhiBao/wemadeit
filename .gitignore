@@ -7,3 +7,6 @@ contracts/broadcast/
 contracts/cache/
 contracts/out/
 .vercel
+
+# build output
+app/tsconfig.tsbuildinfo
