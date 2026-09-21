@@ -137,9 +137,14 @@ holds — WeMadeIt is cheaper *and* non-custodial.
   settlement on Monad. Verified: 25-AUSD pot created + committed on testnet.
   Any organizer anywhere collects borderless dollars; contributors join with
   one tap and no seed phrase.
+- **Envio (indexer, `indexer/`):** HyperIndex tracks all six factory generations
+  on both chains with dynamic clone registration (`contractRegister` on
+  `PotCreated` → every pot's commits/tilts/refunds indexed, three `PotCreated`
+  shapes covered). The public feed reads one Envio GraphQL query instead of
+  per-factory RPC enumeration, with automatic RPC fallback. Local:
+  `cd indexer && pnpm install && pnpm dev` (GraphQL at `:8080`).
 - Mera UX + One-Passkey-Many-Keys (FaceID flow) · Dynamic (embedded wallets) ·
-  Envio (indexer) · MetaMask/Nansen-compatible (standard wagmi +
-  explorer-verified contracts).
+  MetaMask/Nansen-compatible (standard wagmi + explorer-verified contracts).
 
 ## Run locally
 

@@ -20,6 +20,7 @@ import { useMera } from "../lib/mera-context";
 import { ChainGuard, useWrongChain } from "../components/ChainGuard";
 import { dynamicEnabled } from "../lib/wagmi";
 import { parsePotText, type PotProposal } from "../lib/assist";
+import { fetchPublicPots, type EnvioPot } from "../lib/envio";
 import VisibilityBadge from "../components/VisibilityBadge";
 import { forgetPot, hiddenPots, rememberPot, unhidePot, vaultEntry, vaultPots } from "../lib/potVault";
 import { potFromReceipt } from "../lib/potFromReceipt";
@@ -567,6 +568,7 @@ type FeedCard = {
   count: bigint;
   size: bigint;
   state: number;
+  organizer?: string;
 };
 
 /** The single public discovery feed: search + status filter over every factory
@@ -583,11 +585,40 @@ function PublicFeed({
   const { history } = useAppChain();
   const [addrs, setAddrs] = useState<string[]>([]);
   const [scanned, setScanned] = useState(false);
+  const [envioCards, setEnvioCards] = useState<FeedCard[] | null>(null);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "filling" | "tilted">("all");
   const client = usePublicClient({ chainId });
 
+  // Preferred path: one Envio query replaces the whole RPC enumeration.
+  // Falls through to direct reads when unconfigured or on any failure.
   useEffect(() => {
+    let live = true;
+    fetchPublicPots(chainId, 100).then((pots) => {
+      if (!live) return;
+      if (!pots) {
+        setEnvioCards(null);
+        return;
+      }
+      setEnvioCards(
+        pots.map((p) => ({
+          addr: p.address,
+          title: p.title || "Group pot",
+          count: BigInt(p.commitCount),
+          size: BigInt(p.partySize),
+          state: p.state === "Tilted" ? 1 : p.state === "Refunding" ? 2 : 0,
+          organizer: p.organizer,
+        }))
+      );
+      setScanned(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [chainId]);
+
+  useEffect(() => {
+    if (envioCards !== null) return; // Envio answered — skip RPC enumeration
     if (!client) {
       setAddrs([]);
       return;
@@ -665,19 +696,25 @@ function PublicFeed({
         count: r[1] ?? 0n,
         size,
         state: r[3] ?? 0,
+        organizer: typeof r[7] === "string" ? r[7] : undefined,
       });
     }
     return out;
   }, [data, addrs, viewer]);
 
-  const shown = cards.filter((c) => {
+  // Envio-sourced cards replace the RPC set wholesale when available.
+  const base = envioCards ?? cards;
+  const shown = base.filter((c) => {
     if (filter === "filling" && !(c.state === 0 && c.count < c.size)) return false;
     if (filter === "tilted" && c.state !== 1) return false;
     if (q && !c.title.toLowerCase().includes(q.toLowerCase())) return false;
+    // Your pots live in Your pots — Public is for discovery, not duplicates.
+    if (viewer && c.organizer && c.organizer.toLowerCase() === viewer.toLowerCase()) return false;
     return true;
   });
 
-  if (scanned && addrs.length === 0)
+  const ready = envioCards !== null || (scanned && !!data);
+  if (ready && base.length === 0)
     return (
       <div>
         <h2 className="text-xl font-bold">Public pots</h2>
@@ -689,7 +726,10 @@ function PublicFeed({
     <div>
       <h2 className="text-xl font-bold">
         {/* Count is joinable public pots, not any factory total. */}
-        Public pots{data ? ` (${cards.length})` : ""}
+        Public pots{ready ? ` (${base.length})` : ""}
+        {envioCards !== null && (
+          <span className="ml-2 align-middle text-[11px] font-semibold text-gray-400">via Envio</span>
+        )}
       </h2>
       <p className="mt-1 text-xs text-gray-600">
         Anyone can join these. Invite-only pots never appear here — they live in
@@ -712,7 +752,7 @@ function PublicFeed({
           </button>
         ))}
       </div>
-      {addrs.length === 0 || !data ? (
+      {!ready ? (
         <p className="mt-3 text-sm">Loading…</p>
       ) : shown.length === 0 ? (
         <p className="mt-3 text-sm">Nothing matches. Try another search.</p>

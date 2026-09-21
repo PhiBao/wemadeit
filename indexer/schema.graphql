@@ -1,20 +1,26 @@
 type Pot @entity {
-  id: ID!
-  title: String!
+  id: ID! # "{chainId}-{pot address lowercase}"
+  chainId: BigInt!
+  address: String!
   organizer: String!
   payee: String!
   token: String!
   perPerson: BigInt!
   partySize: BigInt!
   deadline: BigInt!
-  commitCount: BigInt!
+  title: String!
+  isPrivate: Boolean!
   state: String! # Open | Tilted | Refunding
-  total: BigInt
+  commitCount: BigInt!
+  createdAt: BigInt!
+  createdTx: String!
 }
 
 type Commitment @entity {
-  id: ID! # pot-user
+  id: ID! # "{chainId}-{pot}-{user}-{index}"
   pot: Pot!
   user: String!
   index: BigInt!
+  createdAt: BigInt!
+  txHash: String!
 }

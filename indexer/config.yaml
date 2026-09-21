@@ -1,30 +1,68 @@
-# Envio HyperIndex for Pact on Monad.
-# Fill FACTORY_ADDRESS + START_BLOCK after testnet deploy, then:
-#   pnpm dlx @envio-dev/hyperindex-cli init  (or deploy this dir via Envio Cloud)
-name: pact
-description: Conditional group pots — created, committed, tilted, refunded.
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: wemadeit
+description: Conditional group pots on Monad — created, committed, tilted, refunded.
+# Three factory generations, three PotCreated shapes (topic0 = full signature).
+# V3+ factories share the 9-field event; V2/V4 the 8-field; V1 the 7-field.
+contracts:
+  - name: PactFactory
+    abi_file_path: ./abis/PactFactory.json
+    handler: ./src/handlers/PactFactory.ts
+    events:
+      - event: "PotCreated(address indexed pot, address indexed organizer, address indexed payee, address token, uint256 perPerson, uint256 partySize, uint256 deadline, string title, bool isPrivate)"
+        field_selection:
+          transaction_fields: [hash]
+  - name: PactFactoryV2
+    abi_file_path: ./abis/PactFactoryV2.json
+    handler: ./src/handlers/PactFactoryV2.ts
+    events:
+      - event: "PotCreated(address indexed pot, address indexed organizer, address indexed payee, address token, uint256 perPerson, uint256 partySize, uint256 deadline, string title)"
+  - name: PactFactoryV1
+    abi_file_path: ./abis/PactFactoryV1.json
+    handler: ./src/handlers/PactFactoryV1.ts
+    events:
+      - event: "PotCreated(address indexed pot, address indexed organizer, address indexed payee, address token, uint256 perPerson, uint256 partySize, uint256 deadline)"
+  - name: PactPot
+    abi_file_path: ./abis/PactPot.json
+    handler: ./src/handlers/PactPot.ts
+    # No static addresses anywhere — every pot clone registers from PotCreated.
+    events:
+      - event: "Committed(address indexed pot, address indexed user, uint256 index)"
+        field_selection:
+          transaction_fields: [hash]
+      - event: "Tilted(address indexed pot, uint256 total)"
+      - event: "RefundingOpened(address indexed pot)"
+      - event: "Refunded(address indexed pot, address indexed user, uint256 amount)"
+      - event: "SecretRotated(address indexed pot)"
 networks:
-  - id: 10143 # Monad testnet
-    start_block: 63830698
-    contracts:
-      - name: PactFactory
-        address:
-          - "0xFD842da1854e40c55F19FE63a879CB65cd3B9A28"
   - id: 143 # Monad mainnet
-    start_block: 106125317
+    start_block: 105639807
     contracts:
       - name: PactFactory
         address:
-          - "0xDFEcE74f0aDBa3cc18B065DBA0DEc82bE52AA830"
-        events:
-          - event: PotCreated(address indexed pot, address indexed organizer, address indexed payee, address token, uint256 perPerson, uint256 partySize, uint256 deadline, string title, bool isPrivate)
+          - "0x910e17CC1Ea45B824E3Be700430E3F2cD29c5a4E" # v6
+          - "0xDFEcE74f0aDBa3cc18B065DBA0DEc82bE52AA830" # v5
+          - "0x457ae4d9e8CC1bC6bf3babA9133D1fCe283a9ABE" # v3
+      - name: PactFactoryV2
+        address:
+          - "0x7F50e78b1763c05F944D898EeCC2081c767b2113" # v4
+          - "0xEF673BDac2C86506874919b1ad05Bd7D7fa64344" # v2
+      - name: PactFactoryV1
+        address:
+          - "0x6792E51FBD24f9315282BD5b6c5E713dCc779C69" # v1
       - name: PactPot
-        # Pots are EIP-1167 clones; register dynamically from PotCreated.
-        # If Envio dynamic-contract registration is unavailable, add pot
-        # addresses here after creation (demo scale: a handful of pots).
-        address: []
-        events:
-          - event: Committed(address indexed pot, address indexed user, uint256 index)
-          - event: Tilted(address indexed pot, uint256 total)
-          - event: RefundingOpened(address indexed pot)
-          - event: Refunded(address indexed pot, address indexed user, uint256 amount)
+  - id: 10143 # Monad testnet
+    start_block: 63347629
+    contracts:
+      - name: PactFactory
+        address:
+          - "0x2777C66CDE6C15D301cd0bf03C302b56E298e431" # v6
+          - "0xFD842da1854e40c55F19FE63a879CB65cd3B9A28" # v5
+          - "0xDFEcE74f0aDBa3cc18B065DBA0DEc82bE52AA830" # v3
+      - name: PactFactoryV2
+        address:
+          - "0x910e17CC1Ea45B824E3Be700430E3F2cD29c5a4E" # v4
+          - "0x4f6aD063f1c20D53a4ea4FA1ba46A8783C782D16" # v2
+      - name: PactFactoryV1
+        address:
+          - "0x6792E51FBD24f9315282BD5b6c5E713dCc779C69" # v1
+      - name: PactPot
