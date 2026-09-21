@@ -1,6 +1,6 @@
 # WeMadeIt — money only moves if the group means it
 
-**Live: https://pact-beta.vercel.app** · Track: **Consumer Products & Payments**
+**Live: https://wemadeit.vercel.app** · Track: **Consumer Products & Payments**
 (Metropolis hackathon, Monad) · License: MIT.
 
 ## Thesis
