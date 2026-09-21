@@ -52,14 +52,46 @@ volatility from the conversation.
 
 ## Architecture
 
-```
-app/            Next.js 16 PWA (pnpm, TypeScript, viem/wagmi)
-  lib/mera.ts       Mera passkey → deterministic EOA (BIP-39/44)
-  lib/pactWrite.ts  direct viem write path for passkey sessions
-  lib/wagmi.tsx     wagmi + Dynamic embedded-wallet sync
-  app/api/assist/   TypeSafe (Jev) judgments, server-side only
-contracts/      PactFactory (EIP-1167 clones) + PactPot (escrow)
-indexer/        Envio config + GraphQL schema
+```mermaid
+flowchart TB
+    subgraph Client["app/ — Next.js 16 PWA (pnpm, TypeScript, viem/wagmi)"]
+        UI["pot pages + feed\n(titles, progress, badges)"]
+        AUTH["auth: Mera passkey\n+ Dynamic embedded wallets\n+ injected fallback"]
+        ASSIST["✨ draft-my-pot box"]
+        ENVIO_LIB["lib/envio.ts\n(GraphQL first, RPC fallback)"]
+    end
+
+    subgraph Server["Next.js route handlers (server-only keys)"]
+        PARSE["POST /api/assist/parse\nJev Choice: occasion/currency/deadline"]
+        SCORE["POST /api/assist/score\nJev Noul: legitimacy badge"]
+    end
+
+    subgraph Chain["Monad 143 + 10143"]
+        FACTORY["PactFactory\nEIP-1167 clones · 1% fee (capped 5%)"]
+        POT["PactPot × N\ncommit / commitWithSecret\nrelease · expire · refund\nrotateSecret"]
+        AUSD["AUSD (6-decimal pots)"]
+        MON["MON (native pots)"]
+    end
+
+    subgraph Index["Envio HyperIndex (Cloud)"]
+        IDX["factories v1→v6 · dynamic clone registration\nPotCreated ×3 shapes · commits/tilts/refunds"]
+        GQL[("GraphQL")]
+    end
+
+    ASSIST --> PARSE
+    UI --> SCORE
+    AUTH -->|Face ID / email / wallet| UI
+    UI -->|create · commit · release · refund| FACTORY
+    FACTORY -->|clone| POT
+    POT -->|locks| AUSD
+    POT -->|locks| MON
+    FACTORY -->|PotCreated| IDX
+    POT -->|pot events| IDX
+    IDX --> GQL
+    GQL -->|public feed| ENVIO_LIB
+    ENVIO_LIB --> UI
+    UI -->|fallback: direct RPC reads| FACTORY
+    UI -->|fallback: direct RPC reads| POT
 ```
 
 ## Contracts (Sourcify `exact_match`, both chains)
@@ -69,10 +101,11 @@ pots never listed; titles stay public onchain, joining requires the key).
 
 State machine: `commit()` → full? `release()` (permissionless, pays organizer) :
 deadline passes? `expire()` → `refund()` (pull pattern, per contributor).
-**Visibility (v3):** public pots join via `commit()`; invite-only pots enforce
+**Visibility:** public pots join via `commit()`; invite-only pots enforce
 `commitWithSecret()` — the secret lives in the share-link `#fragment` (never
-sent to servers), the chain stores only its hash. Verified on testnet: open
-commit reverts (`PrivateUseSecret`), keyed commit lands.
+sent to servers), the chain stores only its hash; organizers can rotate it via
+`rotateSecret()`. Verified on testnet: open commit reverts (`PrivateUseSecret`),
+keyed commit lands.
 Security properties, all covered by `forge test` (**16/16 green**): one commit
 per address; organizer cannot touch funds pre-tilt; **fee (1%, capped 5%) is read
 from the factory onchain — callers cannot waive it**; ReentrancyGuard +
@@ -82,10 +115,10 @@ No ceilings by design: party size and duration are unbounded (nothing loops over
 them — a million-person fundraiser costs the same to create as a dinner pot).
 Floors only: ≥2 people, amount above zero, deadline in the future.
 
-| Chain | Factory (v5) |
+| Chain | Factory (current, v6 — full history in `lib/monad.ts`) |
 |---|---|
-| Monad mainnet (143) | `0xDFEcE74f0aDBa3cc18B065DBA0DEc82bE52AA830` |
-| Monad testnet (10143) | `0xFD842da1854e40c55F19FE63a879CB65cd3B9A28` |
+| Monad mainnet (143) | `0x910e17CC1Ea45B824E3Be700430E3F2cD29c5a4E` |
+| Monad testnet (10143) | `0x2777C66CDE6C15D301cd0bf03C302b56E298e431` |
 
 ## Intelligence (TypeSafe, not hype)
 
@@ -131,25 +164,36 @@ holds — WeMadeIt is cheaper *and* non-custodial.
 
 ## Bounty alignment
 
-- **Agora $10k cross-border payments:** AUSD pots are live — canonical AUSD on
-  mainnet (`0x0000…9012a`) and testnet (`0xa901…22dC`), 6-decimal math handled
-  end to end (create/approve/commit/display), FaceID onboarding, instant
-  settlement on Monad. Verified: 25-AUSD pot created + committed on testnet.
-  Any organizer anywhere collects borderless dollars; contributors join with
-  one tap and no seed phrase.
-- **Envio (indexer, `indexer/`) — live on Envio Cloud.
-  on both chains with dynamic clone registration (`contractRegister` on
-  `PotCreated` → every pot's commits/tilts/refunds indexed, three `PotCreated`
-  shapes covered). The public feed reads one Envio GraphQL query instead of
-  per-factory RPC enumeration, with automatic RPC fallback. Local:
-  `cd indexer && pnpm install && pnpm dev` (GraphQL at `:8080`).
-- Mera UX + One-Passkey-Many-Keys (FaceID flow) · Dynamic (embedded wallets) ·
-  MetaMask/Nansen-compatible (standard wagmi + explorer-verified contracts).
+- **Best Mera-Powered UX on Monad** — the whole product is the demo: open a
+  link, Face ID, one tap to commit. No seed phrase, no extension, no chain
+  jargon anywhere; the same passkey reproduces the account on every synced
+  device (`category-labs/mera` SDK, BIP-39/44 derivation, session keys live
+  only in page memory).
+- **Mera: One Passkey, Many Keys** — one ceremony derives the EOA behind every
+  action (create, commit, release, refund, rotation) via the deterministic PRF →
+  HD path; first-visit creates, return visits sign in, cancel stays silent, and
+  stale credentials degrade to plain-English recovery instead of dead ends.
+- **Best Use of Dynamic** — email/social login via embedded wallets synced into
+  wagmi, so every pot action works identically regardless of login path; single
+  Log in entry, opening spinner, provisioning states, and the native
+  account-linking panel for identity management.
+- **Best Use of Envio** — HyperIndex (`indexer/`, live on Envio Cloud) tracks
+  all six factory generations on both chains with dynamic clone registration
+  (`contractRegister` on `PotCreated` → every pot's commits/tilts/refunds
+  indexed; all three `PotCreated` shapes covered). The public feed reads one
+  GraphQL query instead of per-factory RPC enumeration, with automatic RPC
+  fallback and a `via Envio` provenance tag.
+- **Best Cross-Border Payments App on Monad (Agora, $10k)** — AUSD pots:
+  canonical AUSD on mainnet (`0x0000…9012a`) and testnet (`0xa901…22dC`),
+  6-decimal math end to end (create/approve/commit/display), Face ID
+  onboarding, ~600ms settlement. Verified: 25-AUSD pot created + committed on
+  testnet. Any organizer anywhere collects borderless dollars; contributors
+  join with one tap and no seed phrase.
 
 ## Run locally
 
 ```bash
-cd contracts && forge test                      # 9/9
+cd contracts && forge test                      # 16/16
 cd app && pnpm install && pnpm dev              # needs env below
 ```
 
@@ -157,11 +201,14 @@ Env (names only — values in `.env.local`, never committed):
 
 | Var | Scope | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_CHAIN` | public | `testnet` or `mainnet` |
-| `NEXT_PUBLIC_FACTORY_ADDRESS` | public | factory for the active chain (see table) |
-| `NEXT_PUBLIC_AUSD_ADDRESS` | public | stablecoin for dollar pots |
+| `NEXT_PUBLIC_CHAIN` | public | first-visit default chain (`mainnet`) |
 | `NEXT_PUBLIC_DYNAMIC_ENV_ID` | public identifier | Dynamic login (abuse controlled by dashboard allowlists, not secrecy) |
+| `NEXT_PUBLIC_MONAD_MAINNET_RPC` | public | QuickNode Pro endpoint (mainnet) |
+| `NEXT_PUBLIC_MONAD_TESTNET_RPC` | public | QuickNode Pro endpoint (testnet) |
+| `NEXT_PUBLIC_ENVIO_URL` | public | Envio Cloud GraphQL (feed; RPC fallback when unset) |
 | `TYPESAFE_API_KEY` | **server secret** | assist routes; never `NEXT_PUBLIC_` |
+
+Factories + AUSD are canonical constants in `lib/monad.ts` — no env needed.
 
 Vercel: Root Directory `app`, push-to-main auto-deploys.
 
