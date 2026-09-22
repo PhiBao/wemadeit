@@ -87,6 +87,27 @@ export async function passkeyCommitSecret(
   });
 }
 
+const AUSD_FAUCET: Record<number, `0x${string}`> = {
+  // Agora's official testnet faucet: requestFunds(address) → 10,000 AUSD.
+  // No mainnet faucet exists — mainnet deposits come from wallets/exchanges.
+  10143: "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C",
+};
+
+/** Testnet only: drip 10,000 AUSD from Agora's faucet to the passkey account. */
+export async function passkeyFaucetDrip(to: `0x${string}`, chainId: number) {
+  const faucet = AUSD_FAUCET[chainId];
+  if (!faucet) throw new Error("No faucet on this network — switch to testnet for free test AUSD.");
+  const s = passkeySession();
+  if (!s) throw new Error("no passkey session");
+  const wallet = walletFor(s.session, chainId);
+  return wallet.writeContract({
+    address: faucet,
+    abi: [{ type: "function", name: "requestFunds", stateMutability: "nonpayable", inputs: [{ name: "to", type: "address" }], outputs: [] }] as const,
+    functionName: "requestFunds",
+    args: [to],
+  });
+}
+
 export async function passkeyApprove(
   token: `0x${string}`,
   spender: `0x${string}`,

@@ -5,7 +5,8 @@ import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { dynamicEnabled } from "../lib/wagmi";
 import { useMera } from "../lib/mera-context";
 import { AppChainId, useAppChain } from "../lib/app-chain";
-import { passkeyDisconnect, shortAddress } from "../lib/mera";
+import { shortAddress } from "../lib/mera";
+import MeraAccountModal from "./MeraAccountModal";
 
 // Global account cluster: app-network switcher + address + account panel +
 // logout. Rendered in the site header, identical on every logged-in page.
@@ -39,21 +40,13 @@ function NetworkSelect() {
 }
 
 function MeraChip() {
-  const { meraAddr, setMeraAddr } = useMera();
+  const { meraAddr } = useMera();
   if (!meraAddr) return null;
+  // Address chip, QR, balances, faucet, and logout all live in the modal now.
   return (
     <div className="flex items-center gap-2 text-sm">
       <NetworkSelect />
-      <span className="rounded-full bg-emerald-100 px-3 py-1 font-mono">🍏 {shortAddress(meraAddr)}</span>
-      <button
-        onClick={() => {
-          passkeyDisconnect();
-          setMeraAddr(null);
-        }}
-        className="underline"
-      >
-        Log out
-      </button>
+      <MeraAccountModal />
     </div>
   );
 }
