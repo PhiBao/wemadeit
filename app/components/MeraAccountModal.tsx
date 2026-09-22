@@ -13,13 +13,47 @@ import { passkeyFaucetDrip } from "../lib/pactWrite";
 // Account panel for passkey users: address to receive funds, balances, a
 // testnet AUSD faucet call, and logout. Dynamic users get Dynamic's own
 // panel; this is the passkey equivalent.
-export default function MeraAccountModal() {
+export function useMercuryoBuy() {
+  const [buying, setBuying] = useState(false);
+  const [buyErr, setBuyErr] = useState<string | null>(null);
+  const buy = async (address: string) => {
+    setBuying(true);
+    setBuyErr(null);
+    try {
+      const r = await fetch("/api/mercuryo/url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      const j = await r.json();
+      if (j.disabled) {
+        setBuyErr("Card buy is not enabled yet.");
+        return;
+      }
+      if (!r.ok || !j.url) throw new Error("buy unavailable");
+      window.open(j.url, "_blank", "noopener");
+    } catch {
+      setBuyErr("Could not open the buy widget — try again.");
+    } finally {
+      setBuying(false);
+    }
+  };
+  return { buy, buying, buyErr };
+}
+
+export default function MeraAccountModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const { meraAddr, setMeraAddr } = useMera();
   const { appChainId, chain, isMainnet } = useAppChain();
-  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [dripping, setDripping] = useState(false);
   const [dripMsg, setDripMsg] = useState<string | null>(null);
+  const { buy, buying, buyErr } = useMercuryoBuy();
 
   const addr = meraAddr as `0x${string}` | null;
   const { data: mon } = useBalance({ address: addr ?? undefined, chainId: appChainId });
@@ -40,7 +74,7 @@ export default function MeraAccountModal() {
     }
   }, [open ]);
 
-  if (!addr) return null;
+  if (!open || !addr) return null;
 
   const copy = () => {
     navigator.clipboard.writeText(addr);
@@ -69,29 +103,20 @@ export default function MeraAccountModal() {
   const explorer = `${chain.blockExplorers!.default.url}/address/${addr}`;
 
   return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        title="Account"
-        className="rounded-full bg-emerald-100 px-3 py-1 font-mono text-sm"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
       >
-        🍏 {shortAddress(addr)}
-      </button>
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Your account</h2>
-              <button onClick={() => setOpen(false)} className="text-gray-500 underline">
-                Close
-              </button>
-            </div>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Account & deposit</h2>
+          <button onClick={onClose} className="text-gray-500 underline">
+            Close
+          </button>
+        </div>
 
             <div className="mt-4 flex justify-center rounded-xl bg-white p-3">
               <QRCodeSVG value={addr} size={160} />
@@ -128,17 +153,28 @@ export default function MeraAccountModal() {
               )}
             </div>
 
+            <h3 className="mt-4 text-sm font-bold">Deposit</h3>
             {isMainnet ? (
-              <p className="mt-3 text-xs text-gray-600">
-                To deposit, send MON or AUSD here from any wallet or exchange. AUSD is
-                the dollar stablecoin — same address, same account.
-              </p>
+              <div className="mt-1 grid gap-2">
+                <p className="text-xs text-gray-600">
+                  Send MON or AUSD here from any wallet or exchange — same address,
+                  same account.
+                </p>
+                <button
+                  onClick={() => buy(addr)}
+                  disabled={buying}
+                  className="w-full rounded-xl bg-emerald-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {buying ? "Opening…" : "💳 Buy crypto with card"}
+                </button>
+                {buyErr && <p className="text-xs text-amber-800">{buyErr}</p>}
+              </div>
             ) : (
-              <div className="mt-3">
+              <div className="mt-1">
                 <button
                   onClick={drip}
                   disabled={dripping}
-                  className="w-full rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                  className="w-full rounded-xl bg-emerald-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
                   {dripping ? "Requesting…" : "🚰 Get 10,000 test AUSD (faucet)"}
                 </button>
@@ -150,15 +186,13 @@ export default function MeraAccountModal() {
               onClick={() => {
                 passkeyDisconnect();
                 setMeraAddr(null);
-                setOpen(false);
+                onClose();
               }}
               className="mt-4 w-full text-sm text-gray-500 underline"
             >
               Log out
             </button>
-          </div>
-        </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }

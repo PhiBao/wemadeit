@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAccount, useDisconnect, useSwitchChain } from "wagmi";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { dynamicEnabled } from "../lib/wagmi";
@@ -41,12 +42,22 @@ function NetworkSelect() {
 
 function MeraChip() {
   const { meraAddr } = useMera();
+  const [open, setOpen] = useState(false);
   if (!meraAddr) return null;
-  // Address chip, QR, balances, faucet, and logout all live in the modal now.
+  // Explicit buttons: the address chip alone didn't read as tappable.
   return (
     <div className="flex items-center gap-2 text-sm">
       <NetworkSelect />
-      <MeraAccountModal />
+      <span className="rounded-full bg-emerald-100 px-3 py-1 font-mono">
+        🍏 {shortAddress(meraAddr)}
+      </span>
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-full bg-emerald-900 px-3 py-1 font-semibold text-white"
+      >
+        Deposit
+      </button>
+      <MeraAccountModal open={open} onClose={() => setOpen(false)} />
     </div>
   );
 }
