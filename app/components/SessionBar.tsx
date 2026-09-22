@@ -6,13 +6,13 @@ import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { dynamicEnabled } from "../lib/wagmi";
 import { useMera } from "../lib/mera-context";
 import { AppChainId, useAppChain } from "../lib/app-chain";
-import { shortAddress } from "../lib/mera";
-import MeraAccountModal from "./MeraAccountModal";
+import { passkeyDisconnect, shortAddress } from "../lib/mera";
+import AccountSheet from "./AccountSheet";
 
-// Global account cluster: app-network switcher + address + account panel +
-// logout. Rendered in the site header, identical on every logged-in page.
-// Switching the network moves the whole app (factory, feed, explorer) and the
-// wallet together, so testnet and mainnet both stay one tap away.
+// Global account cluster, identical on every logged-in page: app-network
+// switcher + address + Deposit (shared sheet for all login paths) + Account
+// (Dynamic identity panel, when applicable) + Log out. Nothing lives behind
+// an undiscoverable tap.
 export default function SessionBar() {
   if (dynamicEnabled) return <BarDynamic />;
   return <BarPlain />;
@@ -40,24 +40,46 @@ function NetworkSelect() {
   );
 }
 
+function LogoutButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="underline">
+      Log out
+    </button>
+  );
+}
+
 function MeraChip() {
-  const { meraAddr } = useMera();
+  const { meraAddr, setMeraAddr } = useMera();
   const [open, setOpen] = useState(false);
   if (!meraAddr) return null;
-  // Explicit buttons: the address chip alone didn't read as tappable.
+  const addr = meraAddr as `0x${string}`;
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex flex-wrap items-center gap-2 text-sm">
       <NetworkSelect />
-      <span className="rounded-full bg-emerald-100 px-3 py-1 font-mono">
-        🍏 {shortAddress(meraAddr)}
-      </span>
+      <span className="rounded-full bg-emerald-100 px-3 py-1 font-mono">🍏 {shortAddress(addr)}</span>
       <button
         onClick={() => setOpen(true)}
         className="rounded-full bg-emerald-900 px-3 py-1 font-semibold text-white"
       >
         Deposit
       </button>
-      <MeraAccountModal open={open} onClose={() => setOpen(false)} />
+      <LogoutButton
+        onClick={() => {
+          passkeyDisconnect();
+          setMeraAddr(null);
+        }}
+      />
+      <AccountSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        address={addr}
+        isMera={true}
+        onLogout={() => {
+          passkeyDisconnect();
+          setMeraAddr(null);
+          setOpen(false);
+        }}
+      />
     </div>
   );
 }
@@ -66,35 +88,35 @@ function BarPlain() {
   const { meraAddr } = useMera();
   const { address } = useAccount();
   const { disconnect } = useDisconnect();
+  const [open, setOpen] = useState(false);
   if (meraAddr) return <MeraChip />;
   if (!address) return <NetworkSelect />;
+  const addr = address as `0x${string}`;
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex flex-wrap items-center gap-2 text-sm">
       <NetworkSelect />
-      <span className="rounded-full bg-gray-100 px-3 py-1 font-mono">{shortAddress(address)}</span>
-      <button onClick={() => disconnect()} className="underline">
-        Log out
+      <span className="rounded-full bg-gray-100 px-3 py-1 font-mono">{shortAddress(addr)}</span>
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-full bg-emerald-900 px-3 py-1 font-semibold text-white"
+      >
+        Deposit
       </button>
+      <LogoutButton onClick={() => disconnect()} />
+      <AccountSheet open={open} onClose={() => setOpen(false)} address={addr} isMera={false} onLogout={() => disconnect()} />
     </div>
   );
 }
 
 function BarDynamic() {
   const { meraAddr } = useMera();
-  const { primaryWallet, user, handleLogOut, setShowDynamicUserProfile } = useDynamicContext();
+  const { primaryWallet, handleLogOut, setShowDynamicUserProfile } = useDynamicContext();
   const { address } = useAccount();
   const { disconnect } = useDisconnect();
+  const [open, setOpen] = useState(false);
   if (meraAddr) return <MeraChip />;
-  const who = primaryWallet?.address ?? address;
+  const who = (primaryWallet?.address ?? address) as `0x${string}` | undefined;
   if (!who) {
-    if (user) {
-      return (
-        <div className="flex items-center gap-2 text-sm">
-          <NetworkSelect />
-          <span className="rounded-full bg-blue-100 px-3 py-1">⏳ setting up wallet…</span>
-        </div>
-      );
-    }
     return (
       <div className="flex items-center gap-2 text-sm">
         <NetworkSelect />
@@ -102,21 +124,34 @@ function BarDynamic() {
     );
   }
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex flex-wrap items-center gap-2 text-sm">
       <NetworkSelect />
       <span className="rounded-full bg-blue-100 px-3 py-1 font-mono">{shortAddress(who)}</span>
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-full bg-emerald-900 px-3 py-1 font-semibold text-white"
+      >
+        Deposit
+      </button>
       <button onClick={() => setShowDynamicUserProfile(true)} className="underline">
         Account
       </button>
-      <button
+      <LogoutButton
         onClick={() => {
           handleLogOut();
           disconnect();
         }}
-        className="underline"
-      >
-        Log out
-      </button>
+      />
+      <AccountSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        address={who}
+        isMera={false}
+        onLogout={() => {
+          handleLogOut();
+          disconnect();
+        }}
+      />
     </div>
   );
 }
