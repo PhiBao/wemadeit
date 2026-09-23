@@ -160,7 +160,7 @@ export default function AccountSheet({
 
         <h3 className="mt-4 text-sm font-bold">Deposit</h3>
         {faucet ? (
-          <div className="mt-1">
+          <div className="mt-1 grid gap-2">
             <button
               onClick={drip}
               disabled={dripping || isPending}
@@ -169,6 +169,16 @@ export default function AccountSheet({
               {dripping || isPending ? "Requesting…" : "🚰 Get 10,000 test AUSD (faucet)"}
             </button>
             {dripMsg && <p className="mt-1 text-xs text-gray-700">{dripMsg}</p>}
+            <p className="text-xs text-gray-600">
+              Need testnet MON for gas?{" "}
+              <a
+                href="https://faucet.monad.xyz"
+                target="_blank"
+                className="font-semibold text-emerald-900 underline"
+              >
+                Official Monad faucet →
+              </a>
+            </p>
           </div>
         ) : (
           <div className="mt-1 grid gap-2">
