@@ -2,7 +2,7 @@ import { indexer, type Pot } from "envio";
 
 // V1 factories (7-field PotCreated: no title, predates privacy).
 indexer.contractRegister({ contract: "PactFactoryV1", event: "PotCreated" }, ({ event, context }) => {
-  context.chain.PactPot.add(event.params.pot);
+  context.addPactPot(event.params.pot);
 });
 
 indexer.onEvent({ contract: "PactFactoryV1", event: "PotCreated" }, async ({ event, context }) => {
