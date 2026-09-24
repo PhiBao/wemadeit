@@ -6,6 +6,7 @@ import {
   useAccount,
   useConnect,
   usePublicClient,
+  useReadContract,
   useReadContracts,
   useWriteContract,
   useWaitForTransactionReceipt,
@@ -450,6 +451,7 @@ function YourPots({
             key={a}
             pot={a as `0x${string}`}
             chainId={chainId}
+            viewer={viewer}
             onForget={() => {
               forgetPot(chainId, a);
               setVaultTick((t) => t + 1);
@@ -500,10 +502,12 @@ function YourPots({
 function OwnPotCard({
   pot,
   chainId,
+  viewer,
   onForget,
 }: {
   pot: `0x${string}`;
   chainId: 143 | 10143;
+  viewer: `0x${string}` | undefined;
   onForget: () => void;
 }) {
   const router = useRouter();
@@ -521,6 +525,24 @@ function OwnPotCard({
     number | undefined,
     boolean | undefined,
   ];
+  // Claimable-refund signal: money left on the table is the worst outcome.
+  const { data: committed } = useReadContract({
+    address: pot,
+    abi: potAbi,
+    functionName: "committed",
+    args: [viewer!],
+    chainId,
+    query: { enabled: !!viewer && state === 2 },
+  });
+  const { data: refunded } = useReadContract({
+    address: pot,
+    abi: potAbi,
+    functionName: "refunded",
+    args: [viewer!],
+    chainId,
+    query: { enabled: !!viewer && state === 2 && committed === true },
+  });
+  const refundReady = state === 2 && committed === true && refunded === false;
   const open = () => {
     // Re-attach the stored invite key so private pots open ready to commit.
     router.push(priv && stored?.secret ? `/pot/${pot}#s=${stored.secret}` : `/pot/${pot}`);
@@ -538,8 +560,13 @@ function OwnPotCard({
           <strong>{title ?? stored?.title ?? "Loading…"}</strong>
           <span className="flex items-center gap-2">
             {priv !== undefined && <VisibilityBadge isPrivate={priv} />}
+            {refundReady && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                💰 refund ready
+              </span>
+            )}
             {state === 1 && <span>🎉</span>}
-            {state === 2 && <span className="text-xs text-gray-500">refunding</span>}
+            {state === 2 && !refundReady && <span className="text-xs text-gray-500">refunding</span>}
           </span>
         </span>
         {count !== undefined && size !== undefined && (

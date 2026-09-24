@@ -177,12 +177,12 @@ holds — WeMadeIt is cheaper *and* non-custodial.
   wagmi, so every pot action works identically regardless of login path; single
   Log in entry, opening spinner, provisioning states, and the native
   account-linking panel for identity management.
-- **Best Use of Envio** — HyperIndex (`indexer/`, live on Envio Cloud) tracks
-  all six factory generations on both chains with dynamic clone registration
-  (`contractRegister` on `PotCreated` → every pot's commits/tilts/refunds
-  indexed; all three `PotCreated` shapes covered). The public feed reads one
-  GraphQL query instead of per-factory RPC enumeration, with automatic RPC
-  fallback and a `via Envio` provenance tag.
+- **Best Use of Envio** — HyperIndex (`indexer/`, live on Envio Cloud with
+  indexed rows verified) tracks all six factory generations on both chains with
+  dynamic clone registration (`contractRegister` on `PotCreated` → every pot's
+  commits/tilts/refunds indexed; all three `PotCreated` shapes covered). The
+  public feed reads one GraphQL query instead of per-factory RPC enumeration,
+  with automatic RPC fallback and a `via Envio` provenance tag.
 - **Best Cross-Border Payments App on Monad (Agora, $10k)** — AUSD pots:
   canonical AUSD on mainnet (`0x0000…9012a`) and testnet (`0xa901…22dC`),
   6-decimal math end to end (create/approve/commit/display), Face ID

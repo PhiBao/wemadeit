@@ -140,6 +140,14 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     chainId: viewedId,
     query: { enabled: !!viewer },
   });
+  const { data: myRefunded } = useReadContract({
+    address: pot,
+    abi: potAbi,
+    functionName: "refunded",
+    args: [viewer!],
+    chainId: viewedId,
+    query: { enabled: !!viewer },
+  });
   useEffect(() => {
     if (myCommitted) rememberPot(viewedId, pot, { role: "member" });
   }, [myCommitted, pot, viewedId]);
@@ -395,17 +403,21 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
           />
         ) : state === 2 ? (
           myCommitted ? (
-            <button
-              onClick={() =>
-                meraAddr
-                  ? pk(() => passkeyCall(pot, "refund", viewedId))
-                  : act(() => writeContract({ address: pot, abi: potAbi, functionName: "refund" }))
-              }
-              disabled={isPending || pkBusy || checking}
-              className="rounded-xl bg-gray-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
-            >
-              {isPending || pkBusy || checking ? "Refunding…" : "Claim my refund"}
-            </button>
+            myRefunded ? (
+              <p className="font-semibold text-emerald-800">Refunded ✓ — nothing left to claim.</p>
+            ) : (
+              <button
+                onClick={() =>
+                  meraAddr
+                    ? pk(() => passkeyCall(pot, "refund", viewedId))
+                    : act(() => writeContract({ address: pot, abi: potAbi, functionName: "refund" }))
+                }
+                disabled={isPending || pkBusy || checking}
+                className="rounded-xl bg-gray-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
+              >
+                {isPending || pkBusy || checking ? "Refunding…" : "Claim my refund"}
+              </button>
+            )
           ) : (
             <p>Pot missed its goal. Contributors can claim refunds.</p>
           )
@@ -549,7 +561,7 @@ function ExpireRefund({
   return (
     <div className="grid gap-2">
       <p className="text-sm">Deadline passed without filling. Open refunds, then claim yours.</p>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={expire}
           disabled={busy}
@@ -700,7 +712,7 @@ function ShareLink({
             : "⚠️ Open this page from your own invite link before sharing: without the key fragment, the link won't admit anyone."}
         </p>
       )}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input readOnly value={url} className="w-full rounded-lg border px-3 py-2 font-mono text-xs" />
         <button
           onClick={() => {

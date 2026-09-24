@@ -105,6 +105,13 @@ export const potAbi = [
   },
   {
     type: "function",
+    name: "refunded",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
     name: "release",
     stateMutability: "nonpayable",
     inputs: [],
