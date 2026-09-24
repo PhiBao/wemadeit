@@ -6,7 +6,7 @@ function potId(chainId: number, pot: string) {
 
 // V3+ factories (9-field PotCreated): register the clone, then store the pot.
 indexer.contractRegister({ contract: "PactFactory", event: "PotCreated" }, ({ event, context }) => {
-  context.addPactPot(event.params.pot);
+  context.chain.PactPot.add(event.params.pot);
 });
 
 indexer.onEvent({ contract: "PactFactory", event: "PotCreated" }, async ({ event, context }) => {
