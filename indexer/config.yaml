@@ -35,9 +35,10 @@ contracts:
       - event: "SecretRotated(address indexed pot)"
 chains:
   - id: 143 # Monad mainnet
-    # Recent start: all live pots are new, and the app's RPC fallback covers
-    # anything older. Replaying from genesis stalled the sync with no benefit.
-    start_block: 107198802
+    # Near-head start: backfill covers ~1 day; older pots stay visible via
+    # the app's RPC fallback. (A full-history replay over Monad's 100-block
+    # RPC ranges takes ~10h and gains nothing — all live pots are new.)
+    start_block: 107567192
     rpc:
       url: https://rpc.monad.xyz
       for: sync
@@ -56,7 +57,7 @@ chains:
           - "0x6792E51FBD24f9315282BD5b6c5E713dCc779C69" # v1
       - name: PactPot
   - id: 10143 # Monad testnet
-    start_block: 64892698
+    start_block: 65256140
     rpc:
       url: https://testnet-rpc.monad.xyz
       for: sync
