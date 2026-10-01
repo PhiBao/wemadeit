@@ -21,7 +21,7 @@ import DynamicLogin from "../components/DynamicLogin";
 import { useMera } from "../lib/mera-context";
 import { ChainGuard, useWrongChain } from "../components/ChainGuard";
 import { dynamicEnabled } from "../lib/wagmi";
-import { parsePotText, type PotProposal } from "../lib/assist";
+import { assistAvailable, parsePotText, type PotProposal } from "../lib/assist";
 import { fetchPublicPots, type EnvioPot } from "../lib/envio";
 import VisibilityBadge from "../components/VisibilityBadge";
 import { forgetPot, hiddenPots, rememberPot, unhidePot, vaultEntry, vaultPots } from "../lib/potVault";
@@ -50,13 +50,32 @@ export default function Home() {
   const [isPrivate, setIsPrivate] = useState(false);
   const [secret, setSecret] = useState<`0x${string}` | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // Assist availability, probed once. Without this the draft button renders
+  // enabled and does nothing at all when TYPESAFE_API_KEY is unset.
+  const [assistOk, setAssistOk] = useState<boolean | null>(null);
+  const [assistNote, setAssistNote] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    assistAvailable().then((ok) => live && setAssistOk(ok));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const describe = async () => {
     if (nlText.trim().length < 4) return;
     setParsing(true);
+    setAssistNote(null);
     try {
       const p = await parsePotText(nlText);
-      if (!p) return;
+      if (!p) {
+        setAssistNote(
+          assistOk === false
+            ? "AI drafting is off (no API key configured). Fill the form below."
+            : "Couldn't draft that. Fill the form below."
+        );
+        return;
+      }
       setProposal(p);
       setTitle(nlText.trim().slice(0, 120));
       if (p.amount) setAmount(p.amount);
@@ -84,7 +103,6 @@ export default function Home() {
     !/^\d+$/.test(partySize.trim()) || sizeNum < POT_BOUNDS.minParty
       ? `At least ${POT_BOUNDS.minParty} people. No upper limit.`
       : null;
-  const amountErr = !(Number(amount) > 0) ? "Amount must be above zero." : null;
   const daysNum = Number(days);
   const daysErr =
     !/^\d+$/.test(days.trim()) || daysNum < POT_BOUNDS.minDays
@@ -92,9 +110,20 @@ export default function Home() {
       : null;
   const payeeErr =
     payee.trim() && !isAddress(payee.trim()) ? "Payee must be a valid address — or empty for you." : null;
+  // The factory caps titles at MAX_TITLE *bytes* (PactFactory.sol:100), not
+  // characters. Validate the same unit the chain enforces so an emoji-heavy title
+  // fails here with a clear message instead of reverting as BadParams().
+  const titleBytes = new TextEncoder().encode(title.trim()).length;
   const titleErr =
-    title.trim().length > POT_BOUNDS.maxTitle
-      ? `Keep it under ${POT_BOUNDS.maxTitle} characters.`
+    titleBytes > POT_BOUNDS.maxTitle
+      ? `Keep it under ${POT_BOUNDS.maxTitle} bytes — that's ${titleBytes} now (emojis and other non-ASCII characters count as more than one).`
+      : null;
+  // parseUnits throws on things Number() accepts (e.g. "1e5", "0x10"), which
+  // would leave the create button looking dead. Reject them up front.
+  const amountErr = !/^\d*\.?\d+$/.test(amount.trim())
+    ? "Amount must be a plain number."
+    : !(Number(amount) > 0)
+      ? "Amount must be above zero."
       : null;
   const formValid = !sizeErr && !amountErr && !daysErr && !payeeErr && !titleErr;
 
@@ -175,7 +204,7 @@ export default function Home() {
       <p className="mt-4 text-lg">
         Start a pot, share the link. Friends commit their share into escrow. If the
         group fills it before the deadline, the organizer gets paid. If not, everyone
-        is refunded. <strong>No tilt, no charge.</strong>
+        is refunded. <strong>Miss the goal and the refund is free.</strong>
       </p>
 
       {!isConnected && !meraAddr ? (
@@ -206,23 +235,35 @@ export default function Home() {
           <section className="mt-4 rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold">Start a pot</h2>
           <div className="mt-4 rounded-xl bg-emerald-50 p-4">
-            <label className="grid gap-2 text-sm">
-              Describe it in one sentence — we fill the form
-              <textarea
-                value={nlText}
-                onChange={(e) => setNlText(e.target.value)}
-                placeholder="Cabin weekend, 6 of us, $80 each, need it by Friday"
-                rows={2}
-                className="rounded-lg border bg-white px-3 py-2"
-              />
-            </label>
-            <button
-              onClick={describe}
-              disabled={parsing || nlText.trim().length < 4}
-              className="mt-2 rounded-xl bg-emerald-700 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {parsing ? "Understanding…" : "✨ Draft my pot"}
-            </button>
+            {assistOk === false ? (
+              <p className="text-sm">
+                Fill the form below to start a pot.{" "}
+                <span className="text-xs text-gray-600">
+                  (AI drafting is off — no TypeSafe key configured on this deploy.)
+                </span>
+              </p>
+            ) : (
+              <>
+                <label className="grid gap-2 text-sm">
+                  Describe it in one sentence — we fill the form
+                  <textarea
+                    value={nlText}
+                    onChange={(e) => setNlText(e.target.value)}
+                    placeholder="Cabin weekend, 6 of us, $80 each, need it by Friday"
+                    rows={2}
+                    className="rounded-lg border bg-white px-3 py-2"
+                  />
+                </label>
+                <button
+                  onClick={describe}
+                  disabled={parsing || nlText.trim().length < 4}
+                  className="mt-2 rounded-xl bg-emerald-700 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {parsing ? "Understanding…" : "✨ Draft my pot"}
+                </button>
+              </>
+            )}
+            {assistNote && <p className="mt-2 text-xs text-amber-800">{assistNote}</p>}
             {proposal && (
               <p className="mt-2 text-xs">
                 Read as <strong>{proposal.occasion}</strong> · confidence{" "}
@@ -243,7 +284,7 @@ export default function Home() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Cabin weekend 🏔️"
-                maxLength={120}
+                maxLength={POT_BOUNDS.maxTitle}
                 className="rounded-lg border px-3 py-2"
               />
             </label>

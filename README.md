@@ -3,6 +3,20 @@
 **Live: https://wemadeit.vercel.app** · Track: **Consumer Products & Payments**
 (Metropolis hackathon, Monad) · License: MIT.
 
+## AI tooling disclosure
+
+Per the Metropolis rules, this project was built with AI coding assistants
+(OpenCode / opencode, powered by Claude and GPT-family models) for scaffolding,
+refactors, and documentation. All smart contracts were written and audited by the
+team. Two runtime features call a real AI service — **TypeSafe** (Jev), used for
+the "draft my pot" sentence parser and the legitimacy Noul badge:
+
+- `POST /api/assist/parse` — one sentence → structured pot draft
+- `POST /api/assist/score` — legitimacy judgment shown as a feed badge
+
+No AI output can move funds. Contract release/refund paths are fully deterministic,
+and the fee is read from the factory onchain rather than computed by a model.
+
 ## Thesis
 
 **Problem.** Every informal organizer knows the script: you front the Airbnb, the
@@ -111,6 +125,11 @@ per address; organizer cannot touch funds pre-tilt; **fee (1%, capped 5%) is rea
 from the factory onchain — callers cannot waive it**; ReentrancyGuard +
 checks-effects throughout; pot titles capped at 120 bytes.
 
+**Fee transparency.** A tilt charges 1% (set in the factory, `MAX_FEE_BPS` 5%), read
+onchain at release time and surfaced in the UI *before* anyone commits — the release
+button promises the exact net the payee receives, not the gross pot. Refunds are
+free; a pot that misses its goal charges nothing.
+
 No ceilings by design: party size and duration are unbounded (nothing loops over
 them — a million-person fundraiser costs the same to create as a dinner pot).
 Floors only: ≥2 people, amount above zero, deadline in the future.
@@ -157,10 +176,11 @@ treasury infrastructure:
   pots (Kickback-style attendance, same escrow); agent payers (AI agents commit
   to pots via ERC-8004 identity + the same contracts).
 
-**Business model:** 1% fee on tilted pots (onchain, capped at 5%), free under a
-threshold; pro tier for clubs/creators (recurring pots, custom branding,
-analytics). Contra charges 0% and monetizes elsewhere; WeTravel takes cuts plus
-holds — WeMadeIt is cheaper *and* non-custodial.
+**Business model:** 1% fee on tilted pots, shown to the user onchain before they
+commit (onchain, capped at 5%), free under a threshold; pro tier for
+clubs/creators (recurring pots, custom branding, analytics). Contra charges 0% and
+monetizes elsewhere; WeTravel takes cuts plus holds — WeMadeIt is cheaper *and*
+non-custodial.
 
 ## Bounty alignment
 

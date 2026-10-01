@@ -6,7 +6,7 @@ import SiteHeader from "../components/SiteHeader";
 export const metadata: Metadata = {
   title: "WeMadeIt — money only moves if the group means it",
   description:
-    "Conditional group pots on Monad. Commit your share; funds release only when the group hits its rule. No tilt, no charge.",
+    "Conditional group pots on Monad. Commit your share; funds release only when the group hits its rule. Refunds are always free.",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "WeMadeIt" },
 };

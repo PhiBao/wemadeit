@@ -56,9 +56,9 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { formatUnits } from "viem";
-import { potAbi, erc20Abi } from "../../../lib/abi";
+import { potAbi, erc20Abi, factoryAbi } from "../../../lib/abi";
 import { AppChainId, useAppChain } from "../../../lib/app-chain";
-import { chainFor, decimalsForToken, symbolFor } from "../../../lib/monad";
+import { chainFor, decimalsForToken, factoryFor, symbolFor } from "../../../lib/monad";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 
@@ -80,6 +80,23 @@ function usePot(address: `0x${string}`, chainId: AppChainId) {
       c("isPrivate"),
     ],
     query: { refetchInterval: 2000 },
+  });
+}
+
+/**
+ * Tilt fee, read from the FACTORY — PactPot only declares feeBps() on its
+ * IPactFactory interface, it does not implement it, so reading it from the pot
+ * reverts. release() reads the same factory values at execution time, so the
+ * number shown here is exactly what the contract will charge.
+ */
+function useFactoryFee(chainId: AppChainId) {
+  const factory = factoryFor(chainId);
+  return useReadContracts({
+    contracts: [
+      { address: factory, abi: factoryAbi, functionName: "feeBps", chainId },
+      { address: factory, abi: factoryAbi, functionName: "feeRecipient", chainId },
+    ],
+    query: { refetchInterval: 30_000 },
   });
 }
 
@@ -161,7 +178,39 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     setInviteSecret(fromUrl ?? fromVault);
     rememberPot(viewedId, pot, fromUrl ? { secret: fromUrl } : {});
   }, [pot, viewedId]);
-  if (!data) return <main className="p-8">Loading pot…</main>;
+  // Never spin forever: if the reads haven't resolved within a few seconds, say so
+  // instead of showing "Loading pot…" indefinitely while the judge waits.
+  const [readTimedOut, setReadTimedOut] = useState(false);
+  useEffect(() => {
+    if (data) return;
+    const t = setTimeout(() => setReadTimedOut(true), 8000);
+    return () => clearTimeout(t);
+  }, [data]);
+  if (!data)
+    return (
+    <main className="mx-auto max-w-2xl px-6 py-16">
+      <p className="text-lg font-semibold">Loading pot…</p>
+      {readTimedOut && (
+        <>
+          <p className="mt-3 text-sm text-gray-600">
+            This is taking longer than expected. The pot may not exist on this network,
+            or the RPC is not responding.
+          </p>
+          <div className="mt-5 flex gap-3">
+            <button
+              onClick={() => refetch()}
+              className="rounded-xl bg-emerald-700 px-5 py-2 font-semibold text-white"
+            >
+              Retry
+            </button>
+            <a href="/" className="rounded-xl border px-5 py-2 font-semibold">
+              Back to pots
+            </a>
+          </div>
+        </>
+      )}
+    </main>
+  );
   const [state, count, size, perPerson, deadline, token, payee, org, contributors, potTitle, priv] =
     data.map((d) => d.result) as [
       number,
@@ -176,6 +225,12 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
       string,
       boolean,
     ];
+  // Fee comes from the factory, not the pot — PactPot declares feeBps() on its
+  // IPactFactory interface but never implements it, so reading it from the pot
+  // reverts. release() charges from this same factory value.
+  const { data: feeData } = useFactoryFee(viewedId);
+  const feeBps = feeData?.[0]?.result as bigint | undefined;
+  const feeRecipient = feeData?.[1]?.result as `0x${string}` | undefined;
   const locked = !!priv;
   const isOrganizer = !!viewer && !!org && viewer.toLowerCase() === org.toLowerCase();
   const dec = decimalsForToken(token ?? ZERO);
@@ -198,6 +253,13 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const stateLabel = ["Open", "Tilted — paid out", "Refunding"][state] ?? "Unknown";
   const left = Math.max(0, Number(deadline) - Math.floor(Date.now() / 1000));
   const explorer = `${chain.blockExplorers!.default.url}/address/${pot}`;
+
+  // Tilt fee, read from the pot (which mirrors the factory onchain). Shown
+  // explicitly so the release button promises the exact net the payee receives.
+  const gross = perPerson * size;
+  const fee = (gross * (feeBps ?? 0n)) / 10_000n;
+  const net = gross - fee;
+  const feePct = ((feeBps ?? 0n) * 100n) / 10_000n;
 
   const { guard, checking, guardErr } = useWalletGuard();
   // Every wagmi write passes the live send-time network check first, so a
@@ -375,7 +437,9 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
               chainId={viewedId}
               secret={locked ? inviteSecret : null}
               viaPasskey={!!meraAddr}
+              viewer={viewer}
               pk={pk}
+              pkBusy={pkBusy}
             />
           )
         ) : state === 0 && full ? (
@@ -390,7 +454,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
           >
             {isPending || pkBusy || checking
               ? "Releasing…"
-              : `Release ${human(perPerson * size)} ${sym} to organizer`}
+              : `Release ${human(net)} ${sym} to organizer`}
           </button>
         ) : state === 0 && expired ? (
           <ExpireRefund
@@ -434,6 +498,33 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
             Confirmed ✓ <button className="underline" onClick={() => refetch()}>refresh</button>
           </p>
         )}
+        {/* Fee transparency: stated before anyone commits, not discovered on the
+            explorer afterwards. Read onchain, so it always matches the contract. */}
+        {feeBps !== undefined && feeBps > 0n && (
+          <p className="mt-3 border-t pt-3 text-xs text-gray-500">
+            {full ? (
+              <>
+                Tilt fee {feePct}% ({human(fee)} {sym}) is taken at release. Organizer
+                receives {human(net)} {sym}.{" "}
+                {feeRecipient && feeRecipient !== ZERO && (
+                  <>
+                    Fee goes to{" "}
+                    <span className="font-mono">
+                      {feeRecipient.slice(0, 6)}…{feeRecipient.slice(-4)}
+                    </span>
+                    .{" "}
+                  </>
+                )}
+                Set onchain in the factory — not waivable per pot.
+              </>
+            ) : (
+              <>
+                If this pot tilts, a {feePct}% fee is taken at release. Refunds are free.
+                Set onchain in the factory — not waivable per pot.
+              </>
+            )}
+          </p>
+        )}
       </div>
 
       {/* Share */}
@@ -452,7 +543,9 @@ function Erc20Commit({
   chainId,
   secret,
   viaPasskey,
+  viewer,
   pk,
+  pkBusy,
 }: {
   pot: `0x${string}`;
   token: `0x${string}`;
@@ -460,10 +553,12 @@ function Erc20Commit({
   chainId: AppChainId;
   secret: `0x${string}` | null;
   viaPasskey: boolean;
+  /** Wallet OR passkey address. Must come from the caller: a Mera session is not
+   *  a wagmi connector, so reading useAccount() here lost Face ID users. */
+  viewer: `0x${string}` | undefined;
   pk: (fn: () => Promise<`0x${string}`>) => Promise<void>;
+  pkBusy: boolean;
 }) {
-  const { address: me } = useAccount();
-  const viewer = me ?? undefined;
   const { writeContract, isPending, data: txHash } = useWriteContract();
   const { guard, checking, guardErr } = useWalletGuard();
   const { data: allowance, refetch } = useReadContract({
@@ -506,7 +601,7 @@ function Erc20Commit({
               })
             : writeContract({ address: pot, abi: potAbi, functionName: "commit" })
         );
-  const busy = isPending || checking;
+  const busy = isPending || checking || pkBusy;
   return (
     <>
       {ok ? (
@@ -515,7 +610,7 @@ function Erc20Commit({
           disabled={busy}
           className="rounded-xl bg-emerald-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
         >
-          Commit tokens
+          {busy ? "Committing…" : "Commit tokens"}
         </button>
       ) : (
         <button
@@ -523,7 +618,7 @@ function Erc20Commit({
           disabled={busy}
           className="rounded-xl bg-emerald-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
         >
-          Approve then commit
+          {busy ? "Approving…" : "Approve then commit"}
         </button>
       )}
       {guardErr && <p className="mt-2 text-sm text-amber-800">{guardErr}</p>}

@@ -10,3 +10,6 @@ contracts/out/
 
 # build output
 app/tsconfig.tsbuildinfo
+
+# local research notes
+.research/

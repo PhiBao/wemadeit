@@ -47,7 +47,13 @@ export async function fetchPublicPots(chainId: number, limit = 100): Promise<Env
     if (!r.ok) return null;
     const j = await r.json();
     if (j.errors) return null;
-    return (j.data?.Pot ?? []).map((p: Record<string, string>) => ({
+    const rows = j.data?.Pot;
+    // An empty answer means "nothing indexed yet", never "no pots exist". The
+    // indexer starts near head, so an empty set is expected while backfilling —
+    // returning [] here would suppress the RPC fallback and show a false
+    // "no pots yet" to every visitor. Fall through instead.
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    return rows.map((p: Record<string, string>) => ({
       address: p.address,
       chainId,
       title: p.title,
