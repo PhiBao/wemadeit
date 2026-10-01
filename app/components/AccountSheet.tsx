@@ -185,13 +185,10 @@ export default function AccountSheet({
             <p className="text-xs text-gray-600">
               Send MON or AUSD here from any wallet or exchange — same address, same account.
             </p>
-            <button
-              disabled
-              title="Card buy is coming soon"
-              className="w-full cursor-not-allowed rounded-xl bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-500"
-            >
-              💳 Buy crypto with card — coming soon
-            </button>
+            <p className="rounded-xl bg-gray-50 px-4 py-2 text-xs text-gray-500">
+              Card on-ramp is next. Until then, this account accepts MON and AUSD from
+              any wallet or exchange — same address, same account.
+            </p>
           </div>
         )}
 

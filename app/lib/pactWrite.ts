@@ -129,11 +129,13 @@ export async function passkeyCall(
   const s = passkeySession();
   if (!s) throw new Error("no passkey session");
   const wallet = walletFor(s.session, chainId);
+  // release(), expire() and refund() take no arguments — release() reads its fee
+  // from the factory onchain rather than accepting one from the caller. Only
+  // rotateSecret(newHash) needs args, passed by the secret-rotation flow.
   return wallet.writeContract({
     address: pot,
     abi: potAbi,
     functionName: fn,
-    // release() needs fee args; caller passes them for that case.
     ...(args ? { args: args as never } : {}),
   });
 }
