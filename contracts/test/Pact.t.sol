@@ -173,6 +173,48 @@ contract PactTest is Test {
         assertEq(pot.title(), "Test pot");
     }
 
+    function test_title_byte_cap_enforced() public {
+        // MAX_TITLE is a byte limit, not a character limit. The UI validates the
+        // same unit, so this pins both halves of that agreement: 120 ASCII bytes
+        // pass, 121 revert.
+        bytes memory ok = new bytes(120);
+        for (uint256 i = 0; i < 120; i++) {
+            ok[i] = "a";
+        }
+        vm.prank(organizer);
+        address pot = factory.createPot(
+            address(0), 1 ether, 2, block.timestamp + 7 days, organizer, string(ok)
+        );
+        assertEq(bytes(PactPot(pot).title()).length, 120);
+
+        bytes memory tooLong = new bytes(121);
+        for (uint256 i = 0; i < 121; i++) {
+            tooLong[i] = "a";
+        }
+        vm.prank(organizer);
+        vm.expectRevert(PactFactory.BadParams.selector);
+        factory.createPot(address(0), 1 ether, 2, block.timestamp + 7 days, organizer, string(tooLong));
+    }
+
+    function test_title_multibyte_rejects_by_bytes() public {
+        // A 40-character emoji string is 160 UTF-8 bytes and must revert even
+        // though its character count is well under MAX_TITLE. This is the exact
+        // case the create form's byte-based validation exists to catch.
+        bytes memory emoji = new bytes(160);
+        for (uint256 i = 0; i < 40; i++) {
+            // U+1F389 PARTY POPPER, 4 UTF-8 bytes each.
+            emoji[i * 4] = bytes1(0xF0);
+            emoji[i * 4 + 1] = bytes1(0x9F);
+            emoji[i * 4 + 2] = bytes1(0x8E);
+            emoji[i * 4 + 3] = bytes1(0x89);
+        }
+        assertEq(emoji.length, 160);
+        assertGt(emoji.length, 120); // over the byte cap
+        vm.prank(organizer);
+        vm.expectRevert(PactFactory.BadParams.selector);
+        factory.createPot(address(0), 1 ether, 2, block.timestamp + 7 days, organizer, string(emoji));
+    }
+
     function _privatePot() internal returns (PactPot, bytes memory secret) {
         secret = abi.encodePacked("invite-only-secret-123");
         bytes32 h = keccak256(secret);

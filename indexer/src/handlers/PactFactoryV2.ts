@@ -22,6 +22,7 @@ indexer.onEvent({ contract: "PactFactoryV2", event: "PotCreated" }, async ({ eve
     isPrivate: false,
     state: existing?.state ?? "Open",
     commitCount: existing?.commitCount ?? 0n,
+    refundedCount: existing?.refundedCount ?? 0n,
     createdAt: BigInt(event.block.timestamp),
     createdTx: event.transaction.hash,
   };

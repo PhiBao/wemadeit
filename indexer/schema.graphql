@@ -12,6 +12,7 @@ type Pot @entity {
   isPrivate: Boolean!
   state: String! # Open | Tilted | Refunding
   commitCount: BigInt!
+  refundedCount: BigInt! # contributors who have claimed a refund (pull pattern)
   createdAt: BigInt!
   createdTx: String!
 }
@@ -23,4 +24,5 @@ type Commitment @entity {
   index: BigInt!
   createdAt: BigInt!
   txHash: String!
+  refundedAt: BigInt # 0 until this contributor claims their refund
 }
