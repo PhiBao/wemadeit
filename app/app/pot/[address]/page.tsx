@@ -214,6 +214,20 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     const t = setTimeout(() => setReadTimedOut(true), 8000);
     return () => clearTimeout(t);
   }, [complete]);
+  // All hooks must be called before ANY early return. The fee read and the
+  // wallet guard used to sit below the `if (!complete)` bail-out, so the hook
+  // count changed the moment `complete` flipped true — React threw "Rendered
+  // fewer hooks than expected" and the error boundary took over. Every hook is
+  // now hoisted above the bail-out so hook order is identical on every render.
+  const { data: feeData } = useFactoryFee(viewedId);
+  const feeBps = feeData?.[0]?.result as bigint | undefined;
+  const feeRecipient = feeData?.[1]?.result as `0x${string}` | undefined;
+  const { guard, checking, guardErr } = useWalletGuard();
+  useEffect(() => {
+    if (r[9]?.result) rememberPot(viewedId, pot, { title: r[9].result as string });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [r[9]?.result]);
+
   if (!complete)
     return (
       <main className="mx-auto max-w-2xl px-6 py-16">
@@ -255,10 +269,8 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     ];
   // Fee comes from the factory, not the pot — PactPot declares feeBps() on its
   // IPactFactory interface but never implements it, so reading it from the pot
-  // reverts. release() charges from this same factory value.
-  const { data: feeData } = useFactoryFee(viewedId);
-  const feeBps = feeData?.[0]?.result as bigint | undefined;
-  const feeRecipient = feeData?.[1]?.result as `0x${string}` | undefined;
+  // reverts. release() charges from this same factory value. (Read above the
+  // bail-out so hook order never changes.)
   const locked = !!priv;
   const isOrganizer = !!viewer && !!org && viewer.toLowerCase() === org.toLowerCase();
   const dec = decimalsForToken(token ?? ZERO);
@@ -270,10 +282,6 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     (perPerson !== undefined && size !== undefined
       ? `${human(perPerson)} ${sym} × ${size.toString()}`
       : "");
-  useEffect(() => {
-    if (displayTitle) rememberPot(viewedId, pot, { title: displayTitle });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayTitle]);
 
   const full = count >= size;
   const expired = Date.now() / 1000 >= Number(deadline);
@@ -289,7 +297,6 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const net = gross - fee;
   const feePct = ((feeBps ?? 0n) * 100n) / 10_000n;
 
-  const { guard, checking, guardErr } = useWalletGuard();
   // Every wagmi write passes the live send-time network check first, so a
   // stale header can never let a transaction escape to the wrong chain.
   const act = (fn: () => void) => {
