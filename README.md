@@ -227,9 +227,12 @@ Four entries, each matched to what the code actually does.
 - **Best Cross-Border Payments App on Monad (Agora, $10k)** — AUSD pots:
   canonical AUSD on mainnet (`0x0000…9012a`) and testnet (`0xa901…22dC`),
   6-decimal math end to end (create/approve/commit/display), Face ID
-  onboarding, ~600ms settlement. Verified: 25-AUSD pot created + committed on
-  testnet. Any organizer anywhere collects borderless dollars; contributors
-  join with one tap and no seed phrase.
+  onboarding, ~600ms settlement. **Verified on mainnet:** pot
+  `0xc9bcfa820b46d0f3ec699e52566c988072f36984` was created with canonical AUSD,
+  funded by two separate passkey accounts, reached its rule, and released
+  0.2 AUSD to the payee — and being invite-only, it also demonstrates the
+  private join-key path in production. Any organizer anywhere collects
+  borderless dollars; contributors join with one tap and no seed phrase.
 
 **Deliberately not entered: _Mera: One Passkey, Many Keys._** That bounty is scoped
 to *non-account* use of Mera's PRF primitive — "anything that is NOT signing
