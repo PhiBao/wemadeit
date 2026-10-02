@@ -109,18 +109,24 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const { connect, connectors } = useConnect();
 
   // Deep links carry no chain: probe both and follow the pot wherever it lives.
+  // Probe partySize(), NOT title() — title() reverts on pre-v2 pots, so probing
+  // by title made every legacy pot look like "not on either chain". partySize()
+  // has existed since v1 and returns a uint on both.
   const { data: probe } = useReadContracts({
     contracts: [
-      { address: pot, abi: potAbi, functionName: "title", chainId: 143 },
-      { address: pot, abi: potAbi, functionName: "title", chainId: 10143 },
+      { address: pot, abi: potAbi, functionName: "partySize", chainId: 143 },
+      { address: pot, abi: potAbi, functionName: "partySize", chainId: 10143 },
     ],
   });
-  const [tMain, tTest] = (probe?.map((d) => d.result) ?? []) as [
-    string | undefined,
-    string | undefined,
+  const [pMain, pTest] = (probe?.map((d) => d.result) ?? []) as [
+    bigint | undefined,
+    bigint | undefined,
   ];
-  const viewedId: AppChainId =
-    (appChainId === 143 ? !!tMain : !!tTest) ? appChainId : tMain ? 143 : tTest ? 10143 : appChainId;
+  // Prefer the currently selected chain when the pot exists there, else follow
+  // the pot to the other chain.
+  const onMain = pMain !== undefined;
+  const onTest = pTest !== undefined;
+  const viewedId: AppChainId = appChainId === 143 ? (onMain ? 143 : onTest ? 10143 : 143) : onTest ? 10143 : onMain ? 143 : 10143;
   useEffect(() => {
     if (viewedId !== appChainId) setAppChainId(viewedId);
   }, [viewedId, appChainId, setAppChainId]);
@@ -192,6 +198,12 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
       })),
     [data],
   );
+  // Only the fields that have existed since v1 gate completeness. title() and
+  // isPrivate() REVERT on pre-v2 pots — that pot generation predates both — and
+  // the cross-chain probe uses title(), so requiring them made legacy pots hang
+  // on "Loading pot…" forever. The page already falls back for both: a missing
+  // title renders as "<perPerson> <sym> × <size>", and a missing isPrivate()
+  // means public.
   const complete =
     r.length >= 11 &&
     r[0].result !== undefined &&
@@ -201,9 +213,9 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     r[4].result !== undefined &&
     r[5].result !== undefined &&
     r[6].result !== undefined &&
-    r[8].result !== undefined &&
-    r[9].result !== undefined &&
-    r[10].result !== undefined;
+    r[8].result !== undefined;
+  // Legacy pot: title()/isPrivate() reverted, so these reads have no value.
+  const legacy = r[9].failure || r[10].failure;
   // Never spin forever: say so instead of showing "Loading pot…" indefinitely.
   const [readTimedOut, setReadTimedOut] = useState(false);
   useEffect(() => {
@@ -264,14 +276,18 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
       string,
       string | undefined,
       string[],
-      string,
-      boolean,
+      string | undefined,
+      boolean | undefined,
     ];
+  // Legacy pots (pre-v2) have no title() and no isPrivate(). Absence of
+  // isPrivate() means public — those generations could only create public pots
+  // (PactFactory.sol:60 createPot passes isPrivate=false).
+  const locked = priv === true;
+  const potName = potTitle || (legacy ? "Early pot" : "Group pot");
   // Fee comes from the factory, not the pot — PactPot declares feeBps() on its
   // IPactFactory interface but never implements it, so reading it from the pot
   // reverts. release() charges from this same factory value. (Read above the
   // bail-out so hook order never changes.)
-  const locked = !!priv;
   const isOrganizer = !!viewer && !!org && viewer.toLowerCase() === org.toLowerCase();
   const dec = decimalsForToken(token ?? ZERO);
   const sym = symbolFor(token ?? ZERO);
@@ -281,7 +297,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     potTitle ||
     (perPerson !== undefined && size !== undefined
       ? `${human(perPerson)} ${sym} × ${size.toString()}`
-      : "");
+      : potName);
 
   const full = count >= size;
   const expired = Date.now() / 1000 >= Number(deadline);
