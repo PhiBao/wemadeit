@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint app components lib"
+    "lint": "eslint app components lib",
+    "test": "node scripts/pot-reads.test.mjs"
   },
   "dependencies": {
     "@category-labs/mera": "^0.2.0",

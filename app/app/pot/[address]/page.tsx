@@ -215,7 +215,9 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     r[6].result !== undefined &&
     r[8].result !== undefined;
   // Legacy pot: title()/isPrivate() reverted, so these reads have no value.
-  const legacy = r[9].failure || r[10].failure;
+  // Optional chaining is required — while the query is still in flight `r` is
+  // empty, so r[9]/r[10] are undefined and a bare .failure threw.
+  const legacy = !!(r[9]?.failure || r[10]?.failure);
   // Never spin forever: say so instead of showing "Loading pot…" indefinitely.
   const [readTimedOut, setReadTimedOut] = useState(false);
   useEffect(() => {
