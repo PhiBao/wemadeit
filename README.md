@@ -30,7 +30,8 @@ funding (it peaked near a $400M valuation), but custodial cards and Venmo killed
 **What.** WeMadeIt turns an informal promise ("yeah, I'm in") into **programmable
 group intent**: the organizer names a rule — *$X each, N people, by Friday* — and
 shares a link. Contributions lock in non-custodial escrow. Hit the rule and the
-organizer is paid automatically (**TILTED**). Miss it and everyone claims a
+organizer can release the pot the moment it fills, and **anyone** can trigger
+that release (**TILTED**) — no organizer action required. Miss it and everyone claims a
 refund. **No tilt, no charge.**
 
 **Why.** The failure isn't splitting — it's *commitment*. WeMadeIt answers "will
