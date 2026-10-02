@@ -184,15 +184,13 @@ non-custodial.
 
 ## Bounty alignment
 
+Four entries, each matched to what the code actually does.
+
 - **Best Mera-Powered UX on Monad** — the whole product is the demo: open a
   link, Face ID, one tap to commit. No seed phrase, no extension, no chain
   jargon anywhere; the same passkey reproduces the account on every synced
   device (`category-labs/mera` SDK, BIP-39/44 derivation, session keys live
   only in page memory).
-- **Mera: One Passkey, Many Keys** — one ceremony derives the EOA behind every
-  action (create, commit, release, refund, rotation) via the deterministic PRF →
-  HD path; first-visit creates, return visits sign in, cancel stays silent, and
-  stale credentials degrade to plain-English recovery instead of dead ends.
 - **Best Use of Dynamic** — email/social login via embedded wallets synced into
   wagmi, so every pot action works identically regardless of login path; single
   Log in entry, opening spinner, provisioning states, and the native
@@ -210,12 +208,29 @@ non-custodial.
   testnet. Any organizer anywhere collects borderless dollars; contributors
   join with one tap and no seed phrase.
 
+**Deliberately not entered: _Mera: One Passkey, Many Keys._** That bounty is scoped
+to *non-account* use of Mera's PRF primitive — "anything that is NOT signing
+blockchain transactions from a wallet account." Our PRF derivation has exactly one
+purpose: deriving the EOA that signs pot transactions (`lib/mera.ts` → BIP-39 →
+`m/44'/60'/0'/0/0` → secp256k1 signing session). That is wallet-account signing, which
+is the subject of the Mera UX bounty above. Rather than claim a bounty the
+implementation doesn't meet, we left it out. Earning it would mean deriving non-wallet
+material from the PRF — e.g. a shared secret that encrypts invite secrets client-side
+before they ever reach a URL fragment.
+
 ## Run locally
 
 ```bash
 cd contracts && forge test                      # 16/16
 cd app && pnpm install && pnpm dev              # needs env below
+cd app && pnpm typecheck && pnpm lint && pnpm test   # CI checks
 ```
+
+`pnpm lint` enforces `react-hooks/rules-of-hooks` as an error. This is deliberate:
+the pot page crashed in production twice from hooks sitting below an early return,
+which TypeScript cannot catch. `pnpm test` pins the pot page's read-derivation against
+the data shapes it actually receives (empty, partial, modern pot, and pre-v2 pots
+whose `title()`/`isPrivate()` revert).
 
 Env (names only — values in `.env.local`, never committed):
 
