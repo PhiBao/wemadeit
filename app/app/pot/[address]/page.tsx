@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PasskeyConnect from "../../../components/PasskeyConnect";
 import VisibilityBadge from "../../../components/VisibilityBadge";
@@ -126,7 +126,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   }, [viewedId, appChainId, setAppChainId]);
   const chain = chainFor(viewedId);
 
-  const { data, refetch } = usePot(pot, viewedId);
+  const { data, refetch, isFetching } = usePot(pot, viewedId);
   const { meraAddr } = useMera();
   const viewer = (me ?? meraAddr) as `0x${string}` | undefined;
   const gating = !!me && walletChain !== viewedId; // wagmi txs would land elsewhere
@@ -178,41 +178,69 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     setInviteSecret(fromUrl ?? fromVault);
     rememberPot(viewedId, pot, fromUrl ? { secret: fromUrl } : {});
   }, [pot, viewedId]);
-  // Never spin forever: if the reads haven't resolved within a few seconds, say so
-  // instead of showing "Loading pot…" indefinitely while the judge waits.
+  // useReadContracts defaults to allowFailure:true, so ONE failed call leaves an
+  // undefined hole in the array instead of rejecting the query. That hole used to
+  // flow straight into `count.toString()` and blow up render — which is why a
+  // full refresh showed the error boundary but "Try again" succeeded: the 2s
+  // refetch had refilled the hole. Treat an incomplete read set as still-loading
+  // and keep polling, so we render a progress state instead of ever throwing.
+  const r = useMemo(
+    () =>
+      (data ?? []).map((d: { result?: unknown; status?: string }) => ({
+        result: d?.result,
+        failure: !!d && d.status === "failure",
+      })),
+    [data],
+  );
+  const complete =
+    r.length >= 11 &&
+    r[0].result !== undefined &&
+    r[1].result !== undefined &&
+    r[2].result !== undefined &&
+    r[3].result !== undefined &&
+    r[4].result !== undefined &&
+    r[5].result !== undefined &&
+    r[6].result !== undefined &&
+    r[8].result !== undefined &&
+    r[9].result !== undefined &&
+    r[10].result !== undefined;
+  // Never spin forever: say so instead of showing "Loading pot…" indefinitely.
   const [readTimedOut, setReadTimedOut] = useState(false);
   useEffect(() => {
-    if (data) return;
+    if (complete) {
+      setReadTimedOut(false);
+      return;
+    }
     const t = setTimeout(() => setReadTimedOut(true), 8000);
     return () => clearTimeout(t);
-  }, [data]);
-  if (!data)
+  }, [complete]);
+  if (!complete)
     return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <p className="text-lg font-semibold">Loading pot…</p>
-      {readTimedOut && (
-        <>
-          <p className="mt-3 text-sm text-gray-600">
-            This is taking longer than expected. The pot may not exist on this network,
-            or the RPC is not responding.
-          </p>
-          <div className="mt-5 flex gap-3">
-            <button
-              onClick={() => refetch()}
-              className="rounded-xl bg-emerald-700 px-5 py-2 font-semibold text-white"
-            >
-              Retry
-            </button>
-            <a href="/" className="rounded-xl border px-5 py-2 font-semibold">
-              Back to pots
-            </a>
-          </div>
-        </>
-      )}
-    </main>
-  );
+      <main className="mx-auto max-w-2xl px-6 py-16">
+        <p className="text-lg font-semibold">
+          {readTimedOut ? "Still can't read this pot" : "Loading pot…"}
+        </p>
+        <p className="mt-3 text-sm text-gray-600">
+          {readTimedOut
+            ? "Some values didn't come back from the RPC. This usually clears on retry — the address may be a pot on the other Monad network."
+            : "Reading the pot from the chain."}
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="rounded-xl bg-emerald-700 px-5 py-2 font-semibold text-white disabled:opacity-50"
+          >
+            {isFetching ? "Retrying…" : "Retry"}
+          </button>
+          <a href="/" className="rounded-xl border px-5 py-2 font-semibold">
+            Back to pots
+          </a>
+        </div>
+      </main>
+    );
   const [state, count, size, perPerson, deadline, token, payee, org, contributors, potTitle, priv] =
-    data.map((d) => d.result) as [
+    r.map((x) => x.result) as [
       number,
       bigint,
       bigint,

@@ -13,3 +13,4 @@ app/tsconfig.tsbuildinfo
 
 # local research notes
 .research/
+.env*
