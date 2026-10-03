@@ -4,6 +4,12 @@ function rpcUrl(env: string | undefined, fallback: string): string {
   return env && env.startsWith("http") ? env : fallback;
 }
 
+// Canonical deterministic-multicall deployment, verified present on both Monad
+// chains. Declaring it is what lets viem collapse a multi-contract read into a
+// single eth_call instead of N parallel ones — without this the public feed
+// fans out hundreds of requests per load and the RPC answers 429.
+const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11" as const;
+
 export const monadMainnet = defineChain({
   id: 143,
   name: "Monad",
@@ -16,6 +22,7 @@ export const monadMainnet = defineChain({
   blockExplorers: {
     default: { name: "MonadVision", url: "https://monadvision.com" },
   },
+  contracts: { multicall3: { address: MULTICALL3 } },
 });
 
 export const monadTestnet = defineChain({
@@ -32,6 +39,7 @@ export const monadTestnet = defineChain({
   blockExplorers: {
     default: { name: "MonadVision", url: "https://testnet.monadvision.com" },
   },
+  contracts: { multicall3: { address: MULTICALL3 } },
 });
 
 export function chainFor(chainId: number) {

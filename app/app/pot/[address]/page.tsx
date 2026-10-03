@@ -79,7 +79,10 @@ function usePot(address: `0x${string}`, chainId: AppChainId) {
       c("title"),
       c("isPrivate"),
     ],
-    query: { refetchInterval: 2000 },
+    // Live progress matters here, but 2s across 11 reads was ~5 RPC calls per
+    // second per open tab and contributed to rate limiting. 5s still feels live
+    // for a group filling a pot, at a fraction of the request volume.
+    query: { refetchInterval: 5000 },
   });
 }
 
@@ -620,7 +623,7 @@ function Erc20Commit({
     functionName: "allowance",
     args: [viewer!, pot],
     chainId,
-    query: { enabled: !!viewer, refetchInterval: 2000 },
+    query: { enabled: !!viewer, refetchInterval: 5000 },
   });
   const { isSuccess: txDone } = useWaitForTransactionReceipt({ hash: txHash });
   useEffect(() => {

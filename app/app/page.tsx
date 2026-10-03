@@ -692,38 +692,60 @@ function PublicFeed({
       setAddrs([]);
       return;
     }
-    Promise.all(
-      history.map(async (f) => {
+    let live = true;
+
+    // The feed only ever renders a short list, but this used to enumerate up to
+    // 500 pot addresses per factory across six factories — thousands of parallel
+    // eth_calls on first load, which the RPC answered with HTTP 429. Cap what we
+    // actually need and walk the indices in small sequential chunks so we stay
+    // well inside any rate limit.
+    const PER_FACTORY_CAP = 40;
+    const CHUNK = 5;
+
+    (async () => {
+      const out: string[] = [];
+      for (const f of history) {
         try {
           const n = Number(
             await client.readContract({ address: f.address, abi: factoryAbi, functionName: "potCount" })
           );
-          const start = Math.max(0, n - 500);
-          const idx = Array.from({ length: n - start }, (_, i) => BigInt(start + i));
-          return (await Promise.all(
-            idx.map((i) =>
-              client.readContract({ address: f.address, abi: factoryAbi, functionName: "allPots", args: [i] })
-            )
-          )) as string[];
+          if (n <= 0) continue;
+          const start = Math.max(0, n - PER_FACTORY_CAP);
+          for (let i = start; i < n; i += CHUNK) {
+            const idx = Array.from({ length: Math.min(CHUNK, n - i) }, (_, k) => BigInt(i + k));
+            const page = await Promise.all(
+              idx.map((j) =>
+                client
+                  .readContract({ address: f.address, abi: factoryAbi, functionName: "allPots", args: [j] })
+                  .catch(() => null)
+              )
+            );
+            for (const a of page) if (a) out.push(a as string);
+            if (!live) return;
+          }
         } catch {
-          return [] as string[];
+          // A factory that errors is skipped; others still contribute.
         }
-      })
-    )
-      .then((pages) => {
-        setAddrs([...new Set(pages.flat())].reverse());
-        setScanned(true);
-      })
-      .catch(() => {
-        setAddrs([]);
-        setScanned(true);
-      });
+      }
+      if (!live) return;
+      setAddrs([...new Set(out)].reverse());
+      setScanned(true);
+    })();
+
+    return () => {
+      live = false;
+    };
   }, [client, history, chainId]);
 
   const who = (viewer ?? ZERO) as `0x${string}`;
   const FIELDS = ["title", "commitCount", "partySize", "state", "isPrivate", "perPerson", "token", "organizer", "committed"] as const;
+  // Cap how many pots we hydrate at once. Each pot is 9 reads, and even
+  // multicall-batched that is one large call per pot; hundreds of them on load
+  // is what triggered 429s. The feed shows a short list anyway.
+  const FEED_LIMIT = 24;
+  const feedAddrs = useMemo(() => addrs.slice(0, FEED_LIMIT), [addrs]);
   const { data } = useReadContracts({
-    contracts: addrs.flatMap((a) =>
+    contracts: feedAddrs.flatMap((a) =>
       FIELDS.map((functionName) =>
         functionName === "committed"
           ? { address: a as `0x${string}`, abi: potAbi, functionName, args: [who], chainId }
@@ -731,13 +753,13 @@ function PublicFeed({
       )
     ),
     // Hold the last good set across refetches so the list never flashes.
-    query: { enabled: addrs.length > 0, placeholderData: keepPreviousData },
+    query: { enabled: feedAddrs.length > 0, placeholderData: keepPreviousData },
   });
 
   const cards: FeedCard[] = useMemo(() => {
     if (!data) return [];
     const out: FeedCard[] = [];
-    for (let i = 0; i < addrs.length; i++) {
+    for (let i = 0; i < feedAddrs.length; i++) {
       const r = data.slice(i * FIELDS.length, i * FIELDS.length + FIELDS.length).map((d) => d.result) as [
         string | undefined,
         bigint | undefined,
@@ -757,7 +779,7 @@ function PublicFeed({
       const size = r[2] ?? 0n;
       const tok = r[6] ?? ZERO;
       out.push({
-        addr: addrs[i],
+        addr: feedAddrs[i],
         title:
           r[0] ??
           (r[5] !== undefined
@@ -770,7 +792,7 @@ function PublicFeed({
       });
     }
     return out;
-  }, [data, addrs, viewer]);
+  }, [data, feedAddrs, viewer]);
 
   // Union: Envio first, RPC fills whatever it misses (notably while Cloud
   // backfills — an empty Envio answer means "not synced yet", never "no pots").
