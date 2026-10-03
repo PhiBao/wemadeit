@@ -5,7 +5,6 @@ import {
   clearStoredCredential,
   hasStoredCredential,
   isAlreadyRegistered,
-  isCancel,
   passkeyCreate,
   passkeyDisconnect,
   passkeyErrorMessage,
@@ -39,11 +38,11 @@ export default function PasskeyConnect() {
       setMeraAddr((await passkeyCreate()).address);
       setKnown(true);
     } catch (e) {
-      if (isCancel(e)) {
-        // genuinely dismissed — back to idle, no scolding
-      } else {
-        setErr(passkeyErrorMessage(e));
-      }
+      // Never swallow. A Windows Hello "Something went wrong" rejects with
+      // NotAllowedError, which is indistinguishable from a user dismissing the
+      // sheet — silently ignoring "cancels" hid real device failures as a dead
+      // button. One neutral line is cheaper than hiding a hard failure.
+      setErr(passkeyErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -56,9 +55,9 @@ export default function PasskeyConnect() {
       setMeraAddr((await (existing ? passkeySignInExisting() : passkeySignIn())).address);
       setKnown(true);
     } catch (e) {
-      if (isCancel(e)) {
-        // genuinely dismissed — back to idle
-      } else if (isAlreadyRegistered(e)) {
+      // Always surface. Suppressing "cancels" also suppressed Windows Hello's
+      // device-level failure, which rejects with the same error name.
+      if (isAlreadyRegistered(e)) {
         setErr(passkeyErrorMessage(e));
       } else {
         // Stored credential is stale (deleted passkey, new profile…).
@@ -67,7 +66,7 @@ export default function PasskeyConnect() {
         setErr(
           existing
             ? passkeyErrorMessage(e)
-            : "Couldn't find that passkey on this device. Create a new one below."
+            : passkeyErrorMessage(e) || "Couldn't find that passkey on this device."
         );
       }
     } finally {

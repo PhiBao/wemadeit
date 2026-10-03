@@ -114,14 +114,33 @@ export function passkeyErrorMessage(e: unknown): string {
       : "A passkey for this site already exists in this browser. Remove it from your password manager, then try again — or use “I already have a passkey”.";
   }
   const name = webAuthnErrorName(e);
+  // Windows Hello shows its own failure dialog ("Something went wrong — there was
+  // a problem signing in with your passkey") and then rejects with
+  // NotAllowedError, which is indistinguishable from a user closing the sheet.
+  // We used to swallow NotAllowedError silently, which made a hard device-level
+  // failure look like a dead button. One neutral line is a far cheaper mistake
+  // than hiding a real failure, so nothing is swallowed.
+  if (name === "NotAllowedError" || name === "AbortError" || !name) {
+    return isEdge() || isWindows()
+      ? 'Sign-in did not complete. If Windows Security showed "Something went wrong", that is a Windows Hello issue rather than an app bug — try Chrome, or use email login below.'
+      : "Sign-in did not complete. Try again, or use email login below.";
+  }
   if (name === "NotSupportedError" || name === "SecurityError") {
-    return `This browser couldn't create a passkey here (${name ?? "unsupported"}). Try Chrome, or use email login below.`;
+    return `This browser couldn't create a passkey here (${name}). Try Chrome, or use email login below.`;
   }
   if (isMeraError(e) && e.code === "CRYPTO_UNAVAILABLE") {
     return "This browser is missing a required crypto feature. Try Chrome, or use email login below.";
   }
   const msg = e instanceof Error ? e.message : String(e);
   return `Face ID failed${name ? ` (${name})` : ""}: ${msg.slice(0, 140)}`;
+}
+
+function isWindows(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    /Windows/i.test(navigator.userAgent) &&
+    !/Android/i.test(navigator.userAgent)
+  );
 }
 
 /** This device's authenticator does device biometrics (Face ID / fingerprint). */

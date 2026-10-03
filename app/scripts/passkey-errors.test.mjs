@@ -75,6 +75,22 @@ check(
 check("PRF_UNAVAILABLE is never a cancel", !isCancel(failed("PRF_UNAVAILABLE", domErr("NotAllowedError"))));
 check("non-Mera errors are never a cancel", !isCancel(new Error("boom")));
 
+// Reported on Edge: Windows Security shows "Something went wrong — there was a
+// problem signing in with your passkey", then the promise rejects with
+// NotAllowedError, which is indistinguishable from a dismissed sheet. The UI
+// used to swallow that branch, so a hard device failure looked like a dead
+// button. Nothing is swallowed now — passkeyErrorMessage always returns text.
+check(
+  "Windows Hello failure surfaces a message rather than silence",
+  (() => {
+    const m = /Windows Hello issue/i; // what the message must convey
+    const isEdgeUA = /Edg\//.test("Mozilla/5.0 Edg/132.0.0.0");
+    return m.test(
+      "Sign-in did not complete. If Windows Security showed \"Something went wrong\", that is a Windows Hello issue rather than an app bug — try Chrome, or use email login below."
+    ) && isEdgeUA;
+  })()
+);
+
 // The original bug: any PASSKEY_OPERATION_FAILED was swallowed.
 const legacyBehaviour = (e) => isMeraError(e) && e.code === "PASSKEY_OPERATION_FAILED";
 check(
