@@ -90,7 +90,9 @@ export default function PasskeyConnect() {
     );
   }
 
-  const bioWord = bio === false ? "your password manager or security key" : "Face ID";
+  // Keep this noun-only: it is interpolated after a possessive elsewhere, so
+  // embedding "your" here produced "Creates your your password manager…".
+  const bioWord = bio === false ? "password manager or security key" : "Face ID";
   return (
     <div>
       <button

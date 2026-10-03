@@ -811,8 +811,8 @@ function PublicFeed({
         )}
       </h2>
       <p className="mt-1 text-xs text-gray-600">
-        Anyone can join these. Invite-only pots never appear here — they live in
-        their members&apos; Your pots.
+        Anyone can join these. Invite-only pots never appear here — only the people
+        invited to one can see it, under their own Your pots.
       </p>
       <div className="mt-3 flex gap-2">
         <input
