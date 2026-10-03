@@ -135,14 +135,33 @@ export async function supportsPlatformBiometrics(): Promise<boolean> {
   }
 }
 
-/** Sign in with the known passkey. Throws when none is stored. */
+/**
+ * Sign in with the known passkey. Throws when none is stored.
+ *
+ * If the stored credential fails, retry once WITHOUT allowCredentials so the
+ * browser picks whichever passkey it holds for this origin. Reported on Edge:
+ * first login worked but "Resume with Face ID" always failed, even after
+ * clearing site data and creating a fresh passkey. The stored credential ID can
+ * go stale against Edge's built-in password manager (it may hold the credential
+ * under a different internal handle, or one created before a site-data reset),
+ * and an allowCredentials request for a credential the authenticator will not
+ * name fails outright. Letting the browser choose recovers that case without
+ * the user having to notice and click a second button.
+ */
 export async function passkeySignIn(): Promise<PactSession> {
   if (live) return live;
   const known = readStoredCredential();
   if (!known) throw new Error("no stored passkey");
-  const got = await getPasskeyPrfOutput({ rpId: window.location.hostname, credential: known });
-  localStorage.setItem(CRED_KEY, JSON.stringify({ credentialId: got.credentialId }));
-  return openSession(got.prfOutput);
+  try {
+    const got = await getPasskeyPrfOutput({ rpId: window.location.hostname, credential: known });
+    localStorage.setItem(CRED_KEY, JSON.stringify({ credentialId: got.credentialId }));
+    return openSession(got.prfOutput);
+  } catch (e) {
+    if (isCancel(e)) throw e; // user dismissed; do not re-prompt immediately
+    const got = await getPasskeyPrfOutput({ rpId: window.location.hostname });
+    localStorage.setItem(CRED_KEY, JSON.stringify({ credentialId: got.credentialId }));
+    return openSession(got.prfOutput);
+  }
 }
 
 /** Sign in with any passkey the authenticator offers (new device). */
