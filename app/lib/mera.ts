@@ -61,13 +61,67 @@ export function clearStoredCredential() {
   }
 }
 
-/** User dismissed the browser sheet — not an error worth showing. */
+/**
+ * True only when the user genuinely dismissed the browser's passkey sheet.
+ *
+ * Mera collapses four different failures into PASSKEY_OPERATION_FAILED
+ * ("WebAuthn failed, was cancelled, returned an unexpected credential, or the
+ * credential API is unavailable" — see errors.d.ts). Treating all of them as a
+ * cancel made every real failure invisible: the button appeared to do nothing.
+ * Only a NotAllowedError/AbortError from the underlying WebAuthn call is an
+ * actual dismissal; everything else now surfaces with a real message.
+ */
 export function isCancel(e: unknown): boolean {
-  return isMeraError(e) && e.code === "PASSKEY_OPERATION_FAILED";
+  if (!isMeraError(e)) return false;
+  if (e.code !== "PASSKEY_OPERATION_FAILED") return false;
+  const name = webAuthnErrorName(e);
+  return name === "NotAllowedError" || name === "AbortError";
 }
 
 export function isPrfUnavailable(e: unknown): boolean {
   return isMeraError(e) && e.code === "PRF_UNAVAILABLE";
+}
+
+/** The underlying DOMException name (e.g. "InvalidStateError"), if any. */
+function webAuthnErrorName(e: unknown): string | undefined {
+  const cause = (e as { cause?: unknown } | null)?.cause;
+  if (!cause) return undefined;
+  if (typeof DOMException !== "undefined" && cause instanceof DOMException) return cause.name;
+  if (cause instanceof Error) return cause.name;
+  return undefined;
+}
+
+/** A passkey for this site is already registered in the browser's credential manager. */
+export function isAlreadyRegistered(e: unknown): boolean {
+  return webAuthnErrorName(e) === "InvalidStateError";
+}
+
+function isEdge(): boolean {
+  return typeof navigator !== "undefined" && /Edg\//.test(navigator.userAgent);
+}
+
+/**
+ * Turn a passkey failure into something a non-crypto user can act on. Falls
+ * back to the raw message so nothing is silently swallowed again.
+ */
+export function passkeyErrorMessage(e: unknown): string {
+  if (isPrfUnavailable(e)) {
+    return "This passkey can't unlock a wallet (no PRF support). Try iCloud Keychain, Google Password Manager, or 1Password — or use email login below.";
+  }
+  if (isAlreadyRegistered(e)) {
+    return isEdge()
+      ? "A passkey for this site already exists in Edge's password manager. Remove it there (edge://wallet-passwords, or Settings → Passwords), then try again — or use “I already have a passkey”."
+      : "A passkey for this site already exists in this browser. Remove it from your password manager, then try again — or use “I already have a passkey”.";
+  }
+  const name = webAuthnErrorName(e);
+  if (name === "NotSupportedError" || name === "SecurityError") {
+    return `This browser couldn't create a passkey here (${name ?? "unsupported"}). Try Chrome, or use email login below.`;
+  }
+  if (isMeraError(e) && e.code === "CRYPTO_UNAVAILABLE") {
+    return "This browser is missing a required crypto feature. Try Chrome, or use email login below.";
+  }
+  const msg = e instanceof Error ? e.message : String(e);
+  return `Face ID failed${name ? ` (${name})` : ""}: ${msg.slice(0, 140)}`;
 }
 
 /** This device's authenticator does device biometrics (Face ID / fingerprint). */

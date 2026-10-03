@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint app components lib",
-    "test": "node scripts/pot-reads.test.mjs"
+    "test": "node scripts/pot-reads.test.mjs && node scripts/passkey-errors.test.mjs"
   },
   "dependencies": {
     "@category-labs/mera": "^0.2.0",

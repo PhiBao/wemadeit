@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import {
   clearStoredCredential,
   hasStoredCredential,
+  isAlreadyRegistered,
   isCancel,
-  isPrfUnavailable,
   passkeyCreate,
   passkeyDisconnect,
+  passkeyErrorMessage,
   passkeySignIn,
   passkeySignInExisting,
   shortAddress,
@@ -39,13 +40,9 @@ export default function PasskeyConnect() {
       setKnown(true);
     } catch (e) {
       if (isCancel(e)) {
-        // dismissed — back to idle, no scolding
-      } else if (isPrfUnavailable(e)) {
-        setErr(
-          "That passkey can't unlock a wallet (no PRF support). Try iCloud Keychain, Google Password Manager, or 1Password — or use email login below."
-        );
+        // genuinely dismissed — back to idle, no scolding
       } else {
-        setErr(e instanceof Error ? e.message.slice(0, 160) : "Face ID failed — try again.");
+        setErr(passkeyErrorMessage(e));
       }
     } finally {
       setBusy(false);
@@ -60,12 +57,18 @@ export default function PasskeyConnect() {
       setKnown(true);
     } catch (e) {
       if (isCancel(e)) {
-        // dismissed — back to idle
+        // genuinely dismissed — back to idle
+      } else if (isAlreadyRegistered(e)) {
+        setErr(passkeyErrorMessage(e));
       } else {
         // Stored credential is stale (deleted passkey, new profile…).
         clearStoredCredential();
         setKnown(false);
-        setErr("Couldn't find that passkey on this device. Create a new one below.");
+        setErr(
+          existing
+            ? passkeyErrorMessage(e)
+            : "Couldn't find that passkey on this device. Create a new one below."
+        );
       }
     } finally {
       setBusy(false);
