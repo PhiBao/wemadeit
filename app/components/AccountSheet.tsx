@@ -59,7 +59,13 @@ export default function AccountSheet({
   });
 
   const { writeContract, data: dripHash, isPending, reset } = useWriteContract();
-  const { isSuccess: dripDone } = useWaitForTransactionReceipt({ hash: dripHash });
+  // chainId matters for passkey users: they have no connected wallet, so wagmi
+  // would otherwise resolve this receipt against the wrong chain and the balance
+  // refresh below would never fire.
+  const { isSuccess: dripDone } = useWaitForTransactionReceipt({
+    hash: dripHash,
+    chainId: appChainId,
+  });
   useEffect(() => {
     if (dripDone) {
       refetchMon();

@@ -172,7 +172,13 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const [pkHash, setPkHash] = useState<`0x${string}` | undefined>();
   const [pkBusy, setPkBusy] = useState(false);
   const [pkErr, setPkErr] = useState<string | null>(null);
-  const { isSuccess } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
+  // Explicit chainId: a passkey session has no connected wallet, so without this
+  // wagmi resolves the receipt on the wrong chain and the confirmation never
+  // arrives (see the same fix on the home page).
+  const { isSuccess } = useWaitForTransactionReceipt({
+    hash: hash ?? pkHash,
+    chainId: viewedId,
+  });
   const refreshChainReads = useChainRefresh();
 
   // The committed state should appear as soon as the transaction is actually
@@ -188,7 +194,10 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   // changes, so it can never strand the user in a false committed state.
   const [committedLocally, setCommittedLocally] = useState(false);
   const commitIntent = useRef(false);
-  const { data: txReceipt } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
+  const { data: txReceipt } = useWaitForTransactionReceipt({
+    hash: hash ?? pkHash,
+    chainId: viewedId,
+  });
   useEffect(() => {
     if (txReceipt?.status === "reverted") {
       setCommittedLocally(false);
@@ -732,7 +741,7 @@ function Erc20Commit({
     chainId,
     query: { enabled: !!viewer, refetchInterval: 5000 },
   });
-  const { isSuccess: txDone } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isSuccess: txDone } = useWaitForTransactionReceipt({ hash: txHash, chainId });
 
   // `settling` bridges the gap between the approval being mined and the
   // allowance read catching up. It must NOT be the receipt's isSuccess flag:

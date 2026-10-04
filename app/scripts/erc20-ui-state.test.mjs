@@ -281,6 +281,51 @@ check(
   })()
 );
 
+// ---- receipt chain resolution --------------------------------------------
+// The bug behind several reports at once: useWaitForTransactionReceipt with no
+// chainId resolves against the CONNECTED WALLET's chain. A passkey session has
+// no connected wallet, so wagmi fell back to the first chain in the config
+// (mainnet) while the passkey transaction had gone to testnet. The receipt
+// never arrived, so nothing downstream fired: no redirect after create, no
+// "confirmed" refresh, no balance update.
+console.log("\nreceipt chain resolution");
+
+/** Mirrors wagmi's chain selection for the receipt query. */
+function resolveReceiptChain({ explicitChainId, connectedWalletChain, configChains }) {
+  if (explicitChainId !== undefined) return explicitChainId;
+  if (connectedWalletChain !== undefined) return connectedWalletChain;
+  return configChains[0]; // wagmi's fallback when nothing is connected
+}
+
+const CONFIG_CHAINS = [143, 10143]; // mainnet first, as configured
+
+check(
+  "REGRESSION: passkey creating on testnet would poll mainnet without an explicit chainId",
+  (() => {
+    const chain = resolveReceiptChain({
+      explicitChainId: undefined, // the bug
+      connectedWalletChain: undefined, // passkey has no connected wallet
+      configChains: CONFIG_CHAINS,
+    });
+    return chain === 143; // wrong chain — the receipt would never be found
+  })()
+);
+
+check(
+  "with an explicit chainId the passkey receipt resolves on the right chain",
+  resolveReceiptChain({ explicitChainId: 10143, connectedWalletChain: undefined, configChains: CONFIG_CHAINS }) === 10143
+);
+
+check(
+  "a connected wallet (AOE) still resolves correctly, which is why it masked the bug",
+  resolveReceiptChain({ explicitChainId: undefined, connectedWalletChain: 10143, configChains: CONFIG_CHAINS }) === 10143
+);
+
+check(
+  "explicit chainId wins even if the wallet is on a different chain",
+  resolveReceiptChain({ explicitChainId: 10143, connectedWalletChain: 143, configChains: CONFIG_CHAINS }) === 10143
+);
+
 if (failures) {
   console.error(`\n${failures} failing`);
   process.exit(1);

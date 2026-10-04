@@ -106,6 +106,14 @@ export default function Home() {
   useEffect(() => {
     if (error) setCreateInFlight(false);
   }, [error]);
+  // Last-resort release. Any of the paths above should clear the lock, but this
+  // guarantees a dead button can never strand the user for more than 45s, since
+  // that is exactly the failure mode reported twice.
+  useEffect(() => {
+    if (!createInFlight) return;
+    const t = setTimeout(() => setCreateInFlight(false), 45_000);
+    return () => clearTimeout(t);
+  }, [createInFlight]);
   const wrongChain = useWrongChain();
   const { guard, checking, guardErr } = useWalletGuard();
 
@@ -139,7 +147,16 @@ export default function Home() {
       : null;
   const formValid = !sizeErr && !amountErr && !daysErr && !payeeErr && !titleErr;
 
-  const { data: receipt } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
+  // chainId is REQUIRED here. Without it wagmi resolves the receipt against the
+  // connected wallet's chain, and a passkey account has no connected wallet — so
+  // it fell back to the first chain in the config (mainnet). A passkey user
+  // creating a pot on testnet then polled mainnet for that hash forever, the
+  // receipt never arrived, and the page sat on a disabled "Creating…" with no
+  // redirect. A connected wallet (AOE) masked the bug because it sets the chain.
+  const { data: receipt } = useWaitForTransactionReceipt({
+    hash: hash ?? pkHash,
+    chainId: appChainId,
+  });
   const refreshChainReads = useChainRefresh();
   // Used only by the redirect fallback below, to look the new pot up by index if
   // the PotCreated event cannot be parsed out of the receipt.
@@ -164,6 +181,9 @@ export default function Home() {
       });
       setRedirecting(true);
       router.push(isPrivate && secret ? `/pot/${pot}#s=${secret}` : `/pot/${pot}`);
+      // The navigation is in flight; if it is somehow interrupted the pot is
+      // already vaulted, so allow a retry rather than leaving a dead button.
+      setCreateInFlight(false);
     } else {
       // The event could not be parsed from the receipt. Rather than dead-end
       // the user on the home page, fall back to the factory's newest pot: we
@@ -192,6 +212,7 @@ export default function Home() {
             router.push(
               isPrivate && secret ? `/pot/${latest}#s=${secret}` : `/pot/${latest}`
             );
+            setCreateInFlight(false);
             return;
           }
         } catch {
