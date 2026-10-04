@@ -145,6 +145,94 @@ check(
   })()
 );
 
+// ---- commit optimistic-state timing --------------------------------------
+// Reported: with a third-party wallet (AOE) the UI flipped to "You're in ✓"
+// while the user was STILL in the wallet confirmation popup, before they had
+// signed. The flag had been set on click. It must be set only once a tx hash
+// exists, and must be cleared if the popup is dismissed.
+console.log("\ncommit optimistic-state timing");
+
+function commitTracker() {
+  let intent = false;
+  let committedLocally = false;
+  return {
+    onClick: () => {
+      intent = true;
+    },
+    onHash: (hash) => {
+      if (hash) {
+        if (intent) committedLocally = true;
+        intent = false;
+      }
+    },
+    onFailure: () => {
+      intent = false;
+    },
+    onRevert: () => {
+      committedLocally = false;
+      intent = false;
+    },
+    get state() {
+      return { committedLocally, intent };
+    },
+  };
+}
+
+check(
+  "clicking commit does NOT claim committed while the wallet popup is open",
+  (() => {
+    const t = commitTracker();
+    t.onClick();
+    return t.state.committedLocally === false;
+  })(),
+  "UI would say 'You're in' before the user signed"
+);
+
+check(
+  "a hash appearing (user signed) DOES claim committed",
+  (() => {
+    const t = commitTracker();
+    t.onClick();
+    t.onHash("0xabc");
+    return t.state.committedLocally === true;
+  })()
+);
+
+check(
+  "dismissing the popup (no hash) leaves the user uncommitted and still able to retry",
+  (() => {
+    const t = commitTracker();
+    t.onClick();
+    t.onFailure(); // popup rejected, user rejects
+    t.onHash(undefined);
+    return t.state.committedLocally === false;
+  })()
+);
+
+check(
+  "a failed attempt does not leak intent into the next action",
+  (() => {
+    const t = commitTracker();
+    t.onClick();
+    t.onFailure();
+    t.onHash("0xdef"); // next, unrelated action produces a hash
+    return t.state.committedLocally === false;
+  })(),
+  "an unrelated tx would incorrectly show 'You're in'"
+);
+
+check(
+  "a reverted receipt clears the committed state",
+  (() => {
+    const t = commitTracker();
+    t.onClick();
+    t.onHash("0x123");
+    const afterHash = t.state.committedLocally === true;
+    t.onRevert();
+    return afterHash && t.state.committedLocally === false;
+  })()
+);
+
 if (failures) {
   console.error(`\n${failures} failing`);
   process.exit(1);

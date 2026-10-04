@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import PasskeyConnect from "../../../components/PasskeyConnect";
 import VisibilityBadge from "../../../components/VisibilityBadge";
@@ -175,21 +175,38 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const { isSuccess } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
   const refreshChainReads = useChainRefresh();
 
-  // Once a commit is submitted, the UI should show the committed state
-  // immediately rather than waiting on a chain refetch. The read that proves it
-  // (committed(address)) can lag by a round trip or two, and during that window
-  // the button stayed on "Commit tokens" — looking like the commit had not
-  // taken. This local flag is cleared again if the receipt says the transaction
-  // reverted, so it can never strand the user in a false committed state.
+  // The committed state should appear as soon as the transaction is actually
+  // in flight, not while the user is still deciding in a wallet popup.
+  //
+  // It must be keyed on a transaction HASH existing, not on the click: an
+  // external wallet (AOE, MetaMask, OKX) opens a confirmation popup that the
+  // user may dismiss, and switching to "You're in" before they had signed
+  // claimed a commitment that never happened. A hash only exists once the user
+  // has signed, so that is the correct trigger for every account type.
+  //
+  // Cleared again if the receipt reports a revert, or when the account/pot
+  // changes, so it can never strand the user in a false committed state.
   const [committedLocally, setCommittedLocally] = useState(false);
+  const commitIntent = useRef(false);
   const { data: txReceipt } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
   useEffect(() => {
-    if (txReceipt?.status === "reverted") setCommittedLocally(false);
+    if (txReceipt?.status === "reverted") {
+      setCommittedLocally(false);
+      commitIntent.current = false;
+    }
   }, [txReceipt]);
-  // A different account or pot is a different commitment entirely.
   useEffect(() => {
     setCommittedLocally(false);
+    commitIntent.current = false;
   }, [viewer, pot]);
+
+  // A dismissed wallet popup (or a rejected passkey) never produces a hash, so
+  // clear the intent rather than letting it leak into the next action — where it
+  // would show "You're in" for something the user never signed.
+  const pkOrWalletFailed = !!pkErr || (!!error && error !== undefined);
+  useEffect(() => {
+    if (pkOrWalletFailed) commitIntent.current = false;
+  }, [pkOrWalletFailed]);
 
   // Any confirmed write re-reads the chain immediately. Without this the UI
   // showed "Confirmed ✓" next to stale numbers until the next poll tick, and the
@@ -197,12 +214,24 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const prevTx = useRef(hash ?? pkHash);
   useEffect(() => {
     const current = hash ?? pkHash;
+    if (current && current !== prevTx.current) {
+      // A hash exists: the user has signed, so the commit is genuinely in
+      // flight. Switch the UI to the committed state immediately rather than
+      // waiting for committed(address) to catch up.
+      if (commitIntent.current) setCommittedLocally(true);
+      commitIntent.current = false;
+    }
     if (isSuccess && current && current !== prevTx.current) {
       refreshChainReads();
       refetch();
     }
     prevTx.current = current;
   }, [isSuccess, hash, pkHash, refreshChainReads, refetch]);
+
+  /** Mark that the next hash to appear represents a commit. */
+  const markCommitIntent = useCallback(() => {
+    commitIntent.current = true;
+  }, []);
 
   const pk = async (fn: () => Promise<`0x${string}`>) => {
     setPkBusy(true);
@@ -519,7 +548,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
           ) : isNative ? (
             <button
               onClick={() => {
-                setCommittedLocally(true);
+                markCommitIntent();
                 if (meraAddr) {
                   pk(() =>
                     inviteSecret
@@ -555,7 +584,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
               pot={pot}
               token={token as `0x${string}`}
               perPerson={perPerson}
-              onCommitSubmitted={() => setCommittedLocally(true)}
+              onCommitIntent={markCommitIntent}
               chainId={viewedId}
               secret={locked ? inviteSecret : null}
               viaPasskey={!!meraAddr}
@@ -668,7 +697,7 @@ function Erc20Commit({
   viaPasskey,
   viewer,
   alreadyCommitted,
-  onCommitSubmitted,
+  onCommitIntent,
   pk,
   pkBusy,
 }: {
@@ -685,9 +714,10 @@ function Erc20Commit({
    *  let them commit twice from the UI's point of view while the contract
    *  reverts, which reads as a broken app. */
   alreadyCommitted: boolean;
-  /** Called the moment a commit is submitted, so the UI can switch to the
-   *  committed state without waiting for a chain read to catch up. */
-  onCommitSubmitted: () => void;
+  /** Records that a commit is being attempted. The parent switches to the
+   *  committed state only once a transaction hash exists, i.e. after the user
+   *  has actually signed. */
+  onCommitIntent: () => void;
   pk: (fn: () => Promise<`0x${string}`>) => Promise<void>;
   pkBusy: boolean;
 }) {
@@ -744,7 +774,10 @@ function Erc20Commit({
           writeContract({ address: token, abi: erc20Abi, functionName: "approve", args: [pot, perPerson] })
         );
   const commit = () => {
-    onCommitSubmitted();
+    // Record intent only. The parent flips to the committed state when a hash
+    // appears, which is after the user has signed in the wallet popup — not when
+    // they merely clicked, and not if they dismiss the popup.
+    onCommitIntent();
     return viaPasskey
       ? pk(() =>
           secret
