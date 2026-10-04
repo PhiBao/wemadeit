@@ -703,6 +703,26 @@ function Erc20Commit({
     query: { enabled: !!viewer, refetchInterval: 5000 },
   });
   const { isSuccess: txDone } = useWaitForTransactionReceipt({ hash: txHash });
+
+  // `settling` bridges the gap between the approval being mined and the
+  // allowance read catching up. It must NOT be the receipt's isSuccess flag:
+  // that stays true for the life of the component, so including it in `busy`
+  // left the button permanently disabled showing "Waiting for approval…" long
+  // after the transaction succeeded. Reloading was the only way out, which is
+  // exactly the reported symptom.
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    if (!txDone) return;
+    setSettling(true);
+    // Safety net: never leave the user locked out if the allowance read does
+    // not come back (e.g. the RPC is rate limiting).
+    const t = setTimeout(() => setSettling(false), 10_000);
+    return () => clearTimeout(t);
+  }, [txDone]);
+  // Release as soon as the approval is actually visible on chain.
+  useEffect(() => {
+    if ((allowance ?? 0n) >= perPerson) setSettling(false);
+  }, [allowance, perPerson]);
   // Both the approval and the commit change on-chain state (allowance, then
   // commitCount and balances). Re-read everything rather than just allowance,
   // otherwise the account sheet keeps showing the pre-commit balance.
@@ -742,7 +762,7 @@ function Erc20Commit({
             : writeContract({ address: pot, abi: potAbi, functionName: "commit" })
         );
   };
-  const busy = isPending || checking || pkBusy || txDone;
+  const busy = isPending || checking || pkBusy || settling;
   // Once the commitment is onchain the pot pulls the tokens, so allowance drops
   // back below perPerson. Without this guard the button flipped straight back
   // to "Approve then commit" on a pot the user had already joined.

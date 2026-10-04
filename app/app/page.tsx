@@ -666,6 +666,20 @@ function PublicFeed({
   const [filter, setFilter] = useState<"all" | "filling" | "tilted">("all");
   const client = usePublicClient({ chainId });
 
+  // Reset feed state the instant the network changes. Switching mainnet ->
+  // testnet kept the previous chain's addresses and Envio cards on screen, so
+  // mainnet pots appeared in the testnet feed until the new queries resolved
+  // (and `placeholderData: keepPreviousData` deliberately held the old rows
+  // across the new query key). Resetting during render rather than in an effect
+  // means the stale frame is never painted.
+  const [scopedChain, setScopedChain] = useState(chainId);
+  if (scopedChain !== chainId) {
+    setScopedChain(chainId);
+    setAddrs([]);
+    setScanned(false);
+    setEnvioCards(null);
+  }
+
   // Preferred path: one Envio query replaces the whole RPC enumeration.
   // Falls through to direct reads when unconfigured or on any failure.
   useEffect(() => {
@@ -759,8 +773,17 @@ function PublicFeed({
           : { address: a as `0x${string}`, abi: potAbi, functionName, chainId }
       )
     ),
-    // Hold the last good set across refetches so the list never flashes.
-    query: { enabled: feedAddrs.length > 0, placeholderData: keepPreviousData },
+    // Hold the last good set across refetches on the SAME chain so the list does
+    // not flash. It must not carry across a network switch, or mainnet rows
+    // would render under the testnet filter — hence the chainId guard.
+    query: {
+      enabled: feedAddrs.length > 0,
+      placeholderData: (prev, query) => {
+        const key = query?.queryKey as unknown as { queryKey?: unknown[] } | undefined;
+        const qChain = (key?.queryKey?.[1] as { chainId?: number } | undefined)?.chainId;
+        return qChain === chainId ? keepPreviousData(prev) : undefined;
+      },
+    },
   });
 
   const cards: FeedCard[] = useMemo(() => {
