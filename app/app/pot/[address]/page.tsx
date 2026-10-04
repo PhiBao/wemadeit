@@ -55,6 +55,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
+import { keepPreviousData } from "@tanstack/react-query";
 import { formatUnits } from "viem";
 import { potAbi, erc20Abi, factoryAbi } from "../../../lib/abi";
 import { AppChainId, useAppChain } from "../../../lib/app-chain";
@@ -205,7 +206,11 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     functionName: "committed",
     args: [viewer!],
     chainId: viewedId,
-    query: { enabled: !!viewer },
+    // keepPreviousData is essential: refreshChainReads() invalidates this read
+    // after a commit, and without it `myCommitted` flashed to undefined while
+    // refetching, so the guard fell through and the approve/commit buttons
+    // reappeared on a pot the user had already committed to.
+    query: { enabled: !!viewer, placeholderData: keepPreviousData },
   });
   const { data: myRefunded } = useReadContract({
     address: pot,
@@ -213,7 +218,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     functionName: "refunded",
     args: [viewer!],
     chainId: viewedId,
-    query: { enabled: !!viewer },
+    query: { enabled: !!viewer, placeholderData: keepPreviousData },
   });
   useEffect(() => {
     if (myCommitted) rememberPot(viewedId, pot, { role: "member" });
@@ -535,6 +540,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
               secret={locked ? inviteSecret : null}
               viaPasskey={!!meraAddr}
               viewer={viewer}
+              alreadyCommitted={!!myCommitted}
               pk={pk}
               pkBusy={pkBusy}
             />
@@ -641,6 +647,7 @@ function Erc20Commit({
   secret,
   viaPasskey,
   viewer,
+  alreadyCommitted,
   pk,
   pkBusy,
 }: {
@@ -653,6 +660,10 @@ function Erc20Commit({
   /** Wallet OR passkey address. Must come from the caller: a Mera session is not
    *  a wagmi connector, so reading useAccount() here lost Face ID users. */
   viewer: `0x${string}` | undefined;
+  /** This viewer already has a commitment in the pot. Approving again would
+   *  let them commit twice from the UI's point of view while the contract
+   *  reverts, which reads as a broken app. */
+  alreadyCommitted: boolean;
   pk: (fn: () => Promise<`0x${string}`>) => Promise<void>;
   pkBusy: boolean;
 }) {
@@ -706,6 +717,16 @@ function Erc20Commit({
             : writeContract({ address: pot, abi: potAbi, functionName: "commit" })
         );
   const busy = isPending || checking || pkBusy || txDone;
+  // Once the commitment is onchain the pot pulls the tokens, so allowance drops
+  // back below perPerson. Without this guard the button flipped straight back
+  // to "Approve then commit" on a pot the user had already joined.
+  if (alreadyCommitted) {
+    return (
+      <p className="font-semibold text-emerald-800">
+        You&apos;re in ✓ — share the link to fill the rest.
+      </p>
+    );
+  }
   return (
     <>
       {ok ? (
@@ -722,7 +743,7 @@ function Erc20Commit({
           disabled={busy}
           className="rounded-xl bg-emerald-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
         >
-          {busy ? "Approving…" : "Approve then commit"}
+          {busy ? "Waiting for approval…" : "Approve then commit"}
         </button>
       )}
       {guardErr && <p className="mt-2 text-sm text-amber-800">{guardErr}</p>}
