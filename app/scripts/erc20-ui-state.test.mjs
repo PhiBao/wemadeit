@@ -326,6 +326,82 @@ check(
   resolveReceiptChain({ explicitChainId: 10143, connectedWalletChain: 143, configChains: CONFIG_CHAINS }) === 10143
 );
 
+// ---- gas pre-flight and unconfirmed expiry --------------------------------
+// Reported: with no MON for gas, the passkey path still showed
+// "You're in ✓ — share the link to fill the rest." and then nothing happened.
+//
+// Two causes: a hash appears as soon as a transaction is SIGNED (before the
+// node accepts it), and the optimistic flag had no expiry — so a dropped
+// transaction left a permanent false committed state.
+console.log("\ngas pre-flight and unconfirmed expiry");
+
+const MIN_GAS_RESERVE = 10n ** 15n; // 0.001 MON
+
+function gasProblem({ balance, extraValue = 0n }) {
+  if (balance === undefined) return null; // unknown -> do not block
+  return balance >= extraValue + MIN_GAS_RESERVE
+    ? null
+    : "not enough MON for gas";
+}
+
+check(
+  "a zero-balance passkey account is blocked before signing",
+  gasProblem({ balance: 0n }) !== null,
+  "would have signed, advanced the UI, and been dropped"
+);
+
+check(
+  "an account with only dust below the reserve is blocked",
+  gasProblem({ balance: 5n * 10n ** 14n }) !== null
+);
+
+check(
+  "a funded account is allowed through",
+  gasProblem({ balance: 10n ** 17n }) === null
+);
+
+check(
+  "a native commit requires value + gas, not just value",
+  gasProblem({ balance: 10n ** 15n, extraValue: 10n ** 15n }) !== null
+);
+
+check(
+  "an ERC-20 commit needs gas only (no value)",
+  gasProblem({ balance: 2n * 10n ** 15n, extraValue: 0n }) === null
+);
+
+check(
+  "unknown balance does not block a legitimate user",
+  gasProblem({ balance: undefined }) === null
+);
+
+/** Mirrors the optimistic committed flag with its 20s expiry. */
+function optimisticCommit({ hashAppears, receiptArrives, elapsedMs, EXPIRY = 20_000 }) {
+  if (!hashAppears) return false;
+  if (receiptArrives) return true; // confirmed onchain
+  return elapsedMs < EXPIRY; // expires if nothing lands
+}
+
+check(
+  "REGRESSION: a signed-but-dropped transaction does not claim committed forever",
+  (() => {
+    const during = optimisticCommit({ hashAppears: true, receiptArrives: false, elapsedMs: 5_000 });
+    const after = optimisticCommit({ hashAppears: true, receiptArrives: false, elapsedMs: 20_000 });
+    return during === true && after === false;
+  })(),
+  "the user would be stuck on 'You're in' for a commitment that does not exist"
+);
+
+check(
+  "a confirmed transaction stays committed",
+  optimisticCommit({ hashAppears: true, receiptArrives: true, elapsedMs: 60_000 }) === true
+);
+
+check(
+  "no hash means no optimistic state at all",
+  optimisticCommit({ hashAppears: false, receiptArrives: false, elapsedMs: 0 }) === false
+);
+
 if (failures) {
   console.error(`\n${failures} failing`);
   process.exit(1);

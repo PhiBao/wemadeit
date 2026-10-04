@@ -48,6 +48,7 @@ function LegitBadge({
 }
 import {
   useAccount,
+  useBalance,
   useChainId,
   useConnect,
   useReadContract,
@@ -63,6 +64,8 @@ import { chainFor, decimalsForToken, factoryFor, symbolFor } from "../../../lib/
 import { useChainRefresh } from "../../../lib/chainRefresh";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
+/** 0.001 MON — far above any Monad gas cost, so it never blocks a real commit. */
+const MIN_GAS_RESERVE = 10n ** 15n;
 
 /**
  * Make a write failure legible. Raw viem RPC errors arrive as long sentences
@@ -204,6 +207,25 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
       commitIntent.current = false;
     }
   }, [txReceipt]);
+
+  // A hash exists the moment a transaction is SIGNED, before the node accepts
+  // it — so an underfunded commit (no MON for gas) produced a hash, flipped the
+  // UI to "You're in ✓", and then never confirmed. The flag must expire if no
+  // receipt arrives, or the user is left staring at a committed state for a
+  // commitment that does not exist onchain.
+  const [commitUnconfirmed, setCommitUnconfirmed] = useState(false);
+  useEffect(() => {
+    if (!committedLocally || txReceipt) return;
+    const t = setTimeout(() => {
+      setCommittedLocally(false);
+      commitIntent.current = false;
+      setCommitUnconfirmed(true);
+    }, 20_000);
+    return () => clearTimeout(t);
+  }, [committedLocally, txReceipt]);
+  useEffect(() => {
+    if (txReceipt) setCommitUnconfirmed(false);
+  }, [txReceipt]);
   useEffect(() => {
     setCommittedLocally(false);
     commitIntent.current = false;
@@ -241,6 +263,22 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const markCommitIntent = useCallback(() => {
     commitIntent.current = true;
   }, []);
+
+  // Gas pre-flight. A passkey account signs locally, so a hash is produced and
+  // the UI optimistically advances even when the account cannot pay for gas —
+  // the transaction is then dropped and nothing happens. Checking the native
+  // balance first turns a silent no-op into an actionable message.
+  const { data: nativeBal } = useBalance({ address: viewer, chainId: viewedId });
+  /** null when the account can plausibly pay; a message when it cannot. */
+  const gasProblem = useCallback(
+    (extraValue = 0n) => {
+      if (!viewer || nativeBal === undefined) return null;
+      const needed = extraValue + MIN_GAS_RESERVE;
+      if (nativeBal.value >= needed) return null;
+      return `This account has ${formatUnits(nativeBal.value, 18)} MON on this network — not enough for gas. Send MON to ${viewer.slice(0, 6)}…${viewer.slice(-4)} and try again.`;
+    },
+    [viewer, nativeBal]
+  );
 
   const pk = async (fn: () => Promise<`0x${string}`>) => {
     setPkBusy(true);
@@ -557,7 +595,13 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
           ) : isNative ? (
             <button
               onClick={() => {
+                const gp = gasProblem(perPerson);
+                if (gp) {
+                  setPkErr(gp);
+                  return;
+                }
                 markCommitIntent();
+                setCommitUnconfirmed(false);
                 if (meraAddr) {
                   pk(() =>
                     inviteSecret
@@ -594,6 +638,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
               token={token as `0x${string}`}
               perPerson={perPerson}
               onCommitIntent={markCommitIntent}
+              gasProblem={gasProblem}
               chainId={viewedId}
               secret={locked ? inviteSecret : null}
               viaPasskey={!!meraAddr}
@@ -654,6 +699,13 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
         {guardErr && <p className="mt-2 text-sm text-amber-800">{guardErr}</p>}
         {error && <p className="mt-2 text-sm text-red-700">{error.message.slice(0, 220)}</p>}
         {pkErr && <p className="mt-2 text-sm text-red-700">{pkErr}</p>}
+        {commitUnconfirmed && (
+          <p className="mt-2 text-sm text-amber-800">
+            That transaction was submitted but never confirmed, so you are not
+            counted as committed yet. This usually means the account ran out of MON
+            for gas. Check your balance and try again.
+          </p>
+        )}
         {isSuccess && (
           <p className="mt-2 text-sm text-emerald-800">
             Confirmed ✓ <button className="underline" onClick={() => refetch()}>refresh</button>
@@ -707,6 +759,7 @@ function Erc20Commit({
   viewer,
   alreadyCommitted,
   onCommitIntent,
+  gasProblem,
   pk,
   pkBusy,
 }: {
@@ -727,12 +780,15 @@ function Erc20Commit({
    *  committed state only once a transaction hash exists, i.e. after the user
    *  has actually signed. */
   onCommitIntent: () => void;
+  /** Returns a message when the account cannot pay gas, else null. */
+  gasProblem: (extraValue?: bigint) => string | null;
   pk: (fn: () => Promise<`0x${string}`>) => Promise<void>;
   pkBusy: boolean;
 }) {
   const { writeContract, isPending, data: txHash } = useWriteContract();
   const { guard, checking, guardErr } = useWalletGuard();
   const refreshChainReads = useChainRefresh();
+  const [localErr, setLocalErr] = useState<string | null>(null);
   const { data: allowance, refetch } = useReadContract({
     address: token,
     abi: erc20Abi,
@@ -783,6 +839,14 @@ function Erc20Commit({
           writeContract({ address: token, abi: erc20Abi, functionName: "approve", args: [pot, perPerson] })
         );
   const commit = () => {
+    // ERC-20 commit spends no value, but it still needs gas. Without this the
+    // passkey path signed locally, produced a hash, advanced the UI, and then
+    // the transaction was dropped for lack of funds — a silent no-op.
+    const gp = gasProblem(0n);
+    if (gp) {
+      setLocalErr(gp);
+      return;
+    }
     // Record intent only. The parent flips to the committed state when a hash
     // appears, which is after the user has signed in the wallet popup — not when
     // they merely clicked, and not if they dismiss the popup.
@@ -835,6 +899,7 @@ function Erc20Commit({
         </button>
       )}
       {guardErr && <p className="mt-2 text-sm text-amber-800">{guardErr}</p>}
+      {localErr && <p className="mt-2 text-sm text-red-700">{localErr}</p>}
     </>
   );
 }
