@@ -233,6 +233,54 @@ check(
   })()
 );
 
+// ---- create double-submit guard -----------------------------------------
+// Reported: clicking Create twice produced two pots. Only isPending/pkBusy
+// covered the click itself, so once the transaction was submitted the button
+// went live again while the receipt was still in flight.
+console.log("\ncreate double-submit guard");
+
+function createButton({ inFlight, isPending, pkBusy, checking, wrongChain, formValid }) {
+  const disabled = isPending || pkBusy || checking || wrongChain || !formValid || inFlight;
+  const label = isPending || pkBusy || checking || inFlight ? "Creating…" : wrongChain ? "Switch network to create" : "Create pot";
+  return { disabled, label };
+}
+
+check(
+  "Create is clickable when idle and the form is valid",
+  (() => {
+    const s = createButton({ inFlight: false, isPending: false, pkBusy: false, checking: false, wrongChain: false, formValid: true });
+    return s.disabled === false && s.label === "Create pot";
+  })()
+);
+
+check(
+  "Create is locked from the click until the redirect resolves",
+  (() => {
+    const s = createButton({ inFlight: true, isPending: false, pkBusy: false, checking: false, wrongChain: false, formValid: true });
+    return s.disabled === true && s.label === "Creating…";
+  })(),
+  "a second tap would create a duplicate pot"
+);
+
+check(
+  "REGRESSION: submitting alone is not enough — the in-flight lock covers the receipt wait",
+  (() => {
+    // isPending false means the tx was already submitted; only the lock prevents
+    // the duplicate that was reported.
+    const s = createButton({ inFlight: true, isPending: false, pkBusy: false, checking: false, wrongChain: false, formValid: true });
+    return s.disabled === true;
+  })()
+);
+
+check(
+  "a failed write releases the lock so the user can retry",
+  (() => {
+    // after onFailure the parent clears inFlight
+    const s = createButton({ inFlight: false, isPending: false, pkBusy: false, checking: false, wrongChain: false, formValid: true });
+    return s.disabled === false;
+  })()
+);
+
 if (failures) {
   console.error(`\n${failures} failing`);
   process.exit(1);

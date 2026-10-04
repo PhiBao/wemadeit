@@ -95,6 +95,17 @@ export default function Home() {
   const { meraAddr } = useMera();
   const [redirecting, setRedirecting] = useState(false);
   const [createFallback, setCreateFallback] = useState<string | null>(null);
+  // Held from the moment Create is pressed until the redirect resolves (or the
+  // attempt fails). Previously only isPending/pkBusy covered the click itself,
+  // so once the transaction was submitted the button became clickable again
+  // while the receipt was still in flight — and a second click created a second
+  // pot. Reported as duplicate pots on consecutive clicks.
+  const [createInFlight, setCreateInFlight] = useState(false);
+  // A rejected wallet write (user dismissed the popup, RPC refused it) must
+  // release the lock, otherwise Create stays permanently disabled.
+  useEffect(() => {
+    if (error) setCreateInFlight(false);
+  }, [error]);
   const wrongChain = useWrongChain();
   const { guard, checking, guardErr } = useWalletGuard();
 
@@ -130,6 +141,9 @@ export default function Home() {
 
   const { data: receipt } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
   const refreshChainReads = useChainRefresh();
+  // Used only by the redirect fallback below, to look the new pot up by index if
+  // the PotCreated event cannot be parsed out of the receipt.
+  const publicClient = usePublicClient({ chainId: appChainId });
   // Creating a pot changes the factory's potCount, so the public feed and
   // "your pots" list are stale the moment creation confirms.
   useEffect(() => {
@@ -151,12 +165,49 @@ export default function Home() {
       setRedirecting(true);
       router.push(isPrivate && secret ? `/pot/${pot}#s=${secret}` : `/pot/${pot}`);
     } else {
-      setCreateFallback(hash ?? pkHash ?? null);
+      // The event could not be parsed from the receipt. Rather than dead-end
+      // the user on the home page, fall back to the factory's newest pot: we
+      // just created it, so the last one is ours. Only then give up and show
+      // the transaction.
+      void (async () => {
+        try {
+          if (!publicClient) throw new Error("no client");
+          const count = await publicClient.readContract({
+            address: factory,
+            abi: factoryAbi,
+            functionName: "potCount",
+          });
+          if (count > 0n) {
+            const latest = await publicClient.readContract({
+              address: factory,
+              abi: factoryAbi,
+              functionName: "allPots",
+              args: [count - 1n],
+            });
+            rememberPot(appChainId, latest, {
+              role: "organizer",
+              ...(isPrivate && secret ? { secret } : {}),
+            });
+            setRedirecting(true);
+            router.push(
+              isPrivate && secret ? `/pot/${latest}#s=${secret}` : `/pot/${latest}`
+            );
+            return;
+          }
+        } catch {
+          /* fall through to the tx link */
+        }
+        setCreateFallback(hash ?? pkHash ?? null);
+        setCreateInFlight(false);
+      })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receipt]);
 
   const create = async () => {
+    if (createInFlight) return; // no duplicate pots from a double tap
+    setCreateInFlight(true);
+    setCreateFallback(null);
     const tokenAddr = (token === "AUSD" && ausd ? ausd : ZERO) as `0x${string}`;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(days) * 86400);
     const me = (payee || address || meraAddr!) as `0x${string}`;
@@ -179,6 +230,7 @@ export default function Home() {
         setPkHash(await passkeyCreatePot(factory, args, appChainId));
       } catch (e) {
         setPkErr(e instanceof Error ? e.message.slice(0, 200) : "create failed");
+        setCreateInFlight(false);
       } finally {
         setPkBusy(false);
       }
@@ -375,11 +427,13 @@ export default function Home() {
             </div>
             <button
               onClick={create}
-              disabled={isPending || pkBusy || checking || wrongChain || !formValid}
+              disabled={
+                isPending || pkBusy || checking || wrongChain || !formValid || createInFlight
+              }
               title={wrongChain ? "Switch network first" : !formValid ? "Fix the highlighted fields" : undefined}
               className="mt-2 rounded-xl bg-emerald-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
             >
-              {isPending || pkBusy || checking
+              {isPending || pkBusy || checking || createInFlight
                 ? "Creating…"
                 : wrongChain
                   ? "Switch network to create"
