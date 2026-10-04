@@ -175,6 +175,22 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const { isSuccess } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
   const refreshChainReads = useChainRefresh();
 
+  // Once a commit is submitted, the UI should show the committed state
+  // immediately rather than waiting on a chain refetch. The read that proves it
+  // (committed(address)) can lag by a round trip or two, and during that window
+  // the button stayed on "Commit tokens" — looking like the commit had not
+  // taken. This local flag is cleared again if the receipt says the transaction
+  // reverted, so it can never strand the user in a false committed state.
+  const [committedLocally, setCommittedLocally] = useState(false);
+  const { data: txReceipt } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
+  useEffect(() => {
+    if (txReceipt?.status === "reverted") setCommittedLocally(false);
+  }, [txReceipt]);
+  // A different account or pot is a different commitment entirely.
+  useEffect(() => {
+    setCommittedLocally(false);
+  }, [viewer, pot]);
+
   // Any confirmed write re-reads the chain immediately. Without this the UI
   // showed "Confirmed ✓" next to stale numbers until the next poll tick, and the
   // account sheet's balance never refreshed at all (it has no refetchInterval).
@@ -490,7 +506,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
             )}
           </div>
         ) : state === 0 && !full && !expired ? (
-          myCommitted ? (
+          myCommitted || committedLocally ? (
             <p className="font-semibold text-emerald-800">You&apos;re in ✓ — share the link to fill the rest.</p>
           ) : locked && !inviteSecret ? (
             <NoKeyNotice
@@ -502,30 +518,33 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
             />
           ) : isNative ? (
             <button
-              onClick={() =>
-                meraAddr
-                  ? pk(() =>
-                      inviteSecret
-                        ? passkeyCommitSecret(pot, perPerson, inviteSecret, viewedId)
-                        : passkeyCommit(pot, perPerson, viewedId)
-                    )
-                  : act(() =>
-                      inviteSecret
-                        ? writeContract({
-                            address: pot,
-                            abi: potAbi,
-                            functionName: "commitWithSecret",
-                            args: [inviteSecret],
-                            value: perPerson,
-                          })
-                        : writeContract({
-                            address: pot,
-                            abi: potAbi,
-                            functionName: "commit",
-                            value: perPerson,
-                          })
-                    )
-              }
+              onClick={() => {
+                setCommittedLocally(true);
+                if (meraAddr) {
+                  pk(() =>
+                    inviteSecret
+                      ? passkeyCommitSecret(pot, perPerson, inviteSecret, viewedId)
+                      : passkeyCommit(pot, perPerson, viewedId)
+                  );
+                } else {
+                  act(() =>
+                    inviteSecret
+                      ? writeContract({
+                          address: pot,
+                          abi: potAbi,
+                          functionName: "commitWithSecret",
+                          args: [inviteSecret],
+                          value: perPerson,
+                        })
+                      : writeContract({
+                          address: pot,
+                          abi: potAbi,
+                          functionName: "commit",
+                          value: perPerson,
+                        })
+                  );
+                }
+              }}
               disabled={isPending || pkBusy || checking}
               className="rounded-xl bg-emerald-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
             >
@@ -536,11 +555,12 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
               pot={pot}
               token={token as `0x${string}`}
               perPerson={perPerson}
+              onCommitSubmitted={() => setCommittedLocally(true)}
               chainId={viewedId}
               secret={locked ? inviteSecret : null}
               viaPasskey={!!meraAddr}
               viewer={viewer}
-              alreadyCommitted={!!myCommitted}
+              alreadyCommitted={!!myCommitted || committedLocally}
               pk={pk}
               pkBusy={pkBusy}
             />
@@ -648,6 +668,7 @@ function Erc20Commit({
   viaPasskey,
   viewer,
   alreadyCommitted,
+  onCommitSubmitted,
   pk,
   pkBusy,
 }: {
@@ -664,6 +685,9 @@ function Erc20Commit({
    *  let them commit twice from the UI's point of view while the contract
    *  reverts, which reads as a broken app. */
   alreadyCommitted: boolean;
+  /** Called the moment a commit is submitted, so the UI can switch to the
+   *  committed state without waiting for a chain read to catch up. */
+  onCommitSubmitted: () => void;
   pk: (fn: () => Promise<`0x${string}`>) => Promise<void>;
   pkBusy: boolean;
 }) {
@@ -699,8 +723,9 @@ function Erc20Commit({
       : guard(() =>
           writeContract({ address: token, abi: erc20Abi, functionName: "approve", args: [pot, perPerson] })
         );
-  const commit = () =>
-    viaPasskey
+  const commit = () => {
+    onCommitSubmitted();
+    return viaPasskey
       ? pk(() =>
           secret
             ? passkeyCommitSecret(pot, 0n, secret, chainId)
@@ -716,6 +741,7 @@ function Erc20Commit({
               })
             : writeContract({ address: pot, abi: potAbi, functionName: "commit" })
         );
+  };
   const busy = isPending || checking || pkBusy || txDone;
   // Once the commitment is onchain the pot pulls the tokens, so allowance drops
   // back below perPerson. Without this guard the button flipped straight back
