@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import PasskeyConnect from "../../../components/PasskeyConnect";
 import VisibilityBadge from "../../../components/VisibilityBadge";
@@ -59,8 +59,35 @@ import { formatUnits } from "viem";
 import { potAbi, erc20Abi, factoryAbi } from "../../../lib/abi";
 import { AppChainId, useAppChain } from "../../../lib/app-chain";
 import { chainFor, decimalsForToken, factoryFor, symbolFor } from "../../../lib/monad";
+import { useChainRefresh } from "../../../lib/chainRefresh";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
+
+/**
+ * Make a write failure legible. Raw viem RPC errors arrive as long sentences
+ * with a truncated "Request `" tail, which tells the user nothing about whether
+ * the transaction was rejected, mis-parameterised, or simply rate-limited.
+ */
+function describeWriteError(e: unknown): string {
+  if (!(e instanceof Error)) return "transaction failed";
+  const err = e as Error & {
+    cause?: { code?: number; message?: string; details?: string };
+    shortMessage?: string;
+  };
+  const code = err.cause?.code;
+  if (code === 429) return "The RPC rate-limited this transaction. Wait a few seconds and try again.";
+  if (code === -32602 || /Missing or invalid parameters/i.test(err.message)) {
+    return "The RPC rejected the request parameters. This usually means the transaction needs gas — make sure this account holds MON on this network, then try again.";
+  }
+  if (code === 3 || /execution reverted/i.test(err.message)) {
+    return "The contract rejected this transaction. Most often: you already committed, or the pot changed state.";
+  }
+  if (/insufficient funds/i.test(err.message)) {
+    return "This account has no MON on this network, so it cannot pay gas. Fund it, then try again.";
+  }
+  if (err.shortMessage) return err.shortMessage.slice(0, 180);
+  return err.message.split("URL:")[0].trim().slice(0, 180) || "transaction failed";
+}
 
 function usePot(address: `0x${string}`, chainId: AppChainId) {
   const c = (functionName: "state" | "commitCount" | "partySize" | "perPerson" | "deadline" | "token" | "payee" | "organizer" | "contributors" | "title" | "isPrivate") =>
@@ -145,6 +172,20 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
   const [pkBusy, setPkBusy] = useState(false);
   const [pkErr, setPkErr] = useState<string | null>(null);
   const { isSuccess } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
+  const refreshChainReads = useChainRefresh();
+
+  // Any confirmed write re-reads the chain immediately. Without this the UI
+  // showed "Confirmed ✓" next to stale numbers until the next poll tick, and the
+  // account sheet's balance never refreshed at all (it has no refetchInterval).
+  const prevTx = useRef(hash ?? pkHash);
+  useEffect(() => {
+    const current = hash ?? pkHash;
+    if (isSuccess && current && current !== prevTx.current) {
+      refreshChainReads();
+      refetch();
+    }
+    prevTx.current = current;
+  }, [isSuccess, hash, pkHash, refreshChainReads, refetch]);
 
   const pk = async (fn: () => Promise<`0x${string}`>) => {
     setPkBusy(true);
@@ -152,7 +193,7 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
     try {
       setPkHash(await fn());
     } catch (e) {
-      setPkErr(e instanceof Error ? e.message.slice(0, 200) : "transaction failed");
+      setPkErr(describeWriteError(e));
     } finally {
       setPkBusy(false);
     }
@@ -617,6 +658,7 @@ function Erc20Commit({
 }) {
   const { writeContract, isPending, data: txHash } = useWriteContract();
   const { guard, checking, guardErr } = useWalletGuard();
+  const refreshChainReads = useChainRefresh();
   const { data: allowance, refetch } = useReadContract({
     address: token,
     abi: erc20Abi,
@@ -626,17 +668,23 @@ function Erc20Commit({
     query: { enabled: !!viewer, refetchInterval: 5000 },
   });
   const { isSuccess: txDone } = useWaitForTransactionReceipt({ hash: txHash });
+  // Both the approval and the commit change on-chain state (allowance, then
+  // commitCount and balances). Re-read everything rather than just allowance,
+  // otherwise the account sheet keeps showing the pre-commit balance.
   useEffect(() => {
-    if (txDone) refetch();
-  }, [txDone, refetch]);
+    if (txDone) {
+      refetch();
+      refreshChainReads();
+    }
+  }, [txDone, refetch, refreshChainReads]);
   const ok = (allowance ?? 0n) >= perPerson;
+  // Passkey approve used to refetch() immediately after submitting, which races
+  // the mining of the approval: allowance had not landed yet, so the button
+  // stayed on "Approve then commit" and the user could not proceed. Refetch on
+  // receipt instead, and let the allowance query settle.
   const approve = () =>
     viaPasskey
-      ? pk(async () => {
-          const h = await passkeyApprove(token, pot, perPerson, chainId);
-          refetch();
-          return h;
-        })
+      ? pk(() => passkeyApprove(token, pot, perPerson, chainId))
       : guard(() =>
           writeContract({ address: token, abi: erc20Abi, functionName: "approve", args: [pot, perPerson] })
         );
@@ -657,7 +705,7 @@ function Erc20Commit({
               })
             : writeContract({ address: pot, abi: potAbi, functionName: "commit" })
         );
-  const busy = isPending || checking || pkBusy;
+  const busy = isPending || checking || pkBusy || txDone;
   return (
     <>
       {ok ? (

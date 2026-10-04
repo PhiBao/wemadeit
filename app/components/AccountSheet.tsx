@@ -46,13 +46,16 @@ export default function AccountSheet({
 
   const { data: mon, refetch: refetchMon } = useBalance({ address, chainId: appChainId });
   const ausd = ausdFor(appChainId);
+  // This balance had no refetchInterval and only refreshed after a faucet drip,
+  // so committing an AUSD pot left it showing the pre-commit figure. Poll it,
+  // and useChainRefresh() invalidates it the moment any transaction confirms.
   const { data: ausdBal, refetch: refetchAusd } = useReadContract({
     address: ausd ?? undefined,
     abi: erc20Abi,
     functionName: "balanceOf",
     args: [address],
     chainId: appChainId,
-    query: { enabled: !!ausd },
+    query: { enabled: !!ausd, refetchInterval: 15_000 },
   });
 
   const { writeContract, data: dripHash, isPending, reset } = useWriteContract();

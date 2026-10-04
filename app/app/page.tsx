@@ -28,6 +28,7 @@ import { forgetPot, hiddenPots, rememberPot, unhidePot, vaultEntry, vaultPots } 
 import { potFromReceipt } from "../lib/potFromReceipt";
 import { newSecret, secretHash } from "../lib/inviteSecret";
 import { useWalletGuard } from "../lib/walletGuard";
+import { useChainRefresh } from "../lib/chainRefresh";
 
 const ZERO = "0x0000000000000000000000000000000000000000" as const;
 
@@ -128,6 +129,12 @@ export default function Home() {
   const formValid = !sizeErr && !amountErr && !daysErr && !payeeErr && !titleErr;
 
   const { data: receipt } = useWaitForTransactionReceipt({ hash: hash ?? pkHash });
+  const refreshChainReads = useChainRefresh();
+  // Creating a pot changes the factory's potCount, so the public feed and
+  // "your pots" list are stale the moment creation confirms.
+  useEffect(() => {
+    if (receipt) refreshChainReads();
+  }, [receipt, refreshChainReads]);
 
   // Creation confirmed → take the organizer straight to their pot.
   // Private pots carry the invite secret in the link fragment (never the query).
