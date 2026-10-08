@@ -78,10 +78,11 @@ volatility from the conversation.
 
 ## Architecture
 
-**[Architecture diagram →](docs/architecture.html)** — App (sign-in, UI, assist API,
-feed reader) · Monad 143 + 10143 (PactFactory → PactPot clones holding AUSD/MON)
-· Envio HyperIndex (dynamic clone registration, one GraphQL query for the feed).
-Open the HTML file in a browser for the full labeled diagram.
+![WeMadeIt architecture](docs/architecture.svg)
+
+App (sign-in, UI, assist API, feed reader) · Monad 143 + 10143 (PactFactory →
+PactPot clones holding AUSD/MON) · Envio HyperIndex (dynamic clone registration,
+one GraphQL query for the feed). Full labeled version: [docs/architecture.html](docs/architecture.html).
 
 ## Contracts (Sourcify `exact_match`, both chains)
 
