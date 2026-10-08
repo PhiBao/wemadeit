@@ -80,9 +80,10 @@ volatility from the conversation.
 
 ![WeMadeIt architecture](docs/architecture.svg)
 
-App (sign-in, UI, assist API, feed reader) · Monad 143 + 10143 (PactFactory →
-PactPot clones holding AUSD/MON) · Envio HyperIndex (dynamic clone registration,
-one GraphQL query for the feed). Full labeled version: [docs/architecture.html](docs/architecture.html).
+- **App** (`app/` — Next.js PWA): sign-in via Mera passkey, Dynamic, or injected wallet; pot pages + public feed; "draft my pot" box; feed reader that queries Envio GraphQL first with RPC fallback.
+- **Server** (Next.js route handlers, keys stay server-side): `POST /api/assist/parse` (Jev Choice turns one sentence into a pot draft) and `POST /api/assist/score` (Jev Noul legitimacy badge).
+- **Chain** (Monad 143 + 10143): `PactFactory` deploys EIP-1167 `PactPot` clones (1% fee, capped 5%, read onchain). Pots hold AUSD (6-decimal) or MON; `commit` / `commitWithSecret` → `release` (permissionless, pays organizer) or `expire` → `refund` (pull pattern); organizers can rotate the invite key.
+- **Index** (Envio HyperIndex on Cloud): all six factory generations with dynamic clone registration on `PotCreated` (all three event shapes); indexes commits, tilts, and refunds so the whole public feed is one GraphQL query.
 
 ## Contracts (Sourcify `exact_match`, both chains)
 
