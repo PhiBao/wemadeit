@@ -137,7 +137,7 @@ function useFactoryFee(chainId: AppChainId) {
 export default function PotPage({ params }: { params: Promise<{ address: string }> }) {
   const { address: raw } = use(params);
   const pot = raw as `0x${string}`;
-  const { appChainId, setAppChainId } = useAppChain();
+  const { appChainId, setAppChainId, history } = useAppChain();
   const { address: me } = useAccount();
   const walletChain = useChainId();
   const { connect, connectors } = useConnect();
@@ -291,6 +291,27 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
       setPkBusy(false);
     }
   };
+
+  // Every legitimate pot is an EIP-1167 clone of our implementation, deployed by
+// one of our factories. The implementation is public, so ANYONE can deploy a
+// minimal proxy pointing at it and initialize it with their own payee — it
+// accepts commits and releases like a real pot. Reading factory() and checking
+// it against our known deployments is what separates the two. Without this the
+// app renders a stranger's contract identically to ours.
+  const { data: potFactory } = useReadContract({
+    address: pot,
+    abi: potAbi,
+    functionName: "factory",
+    chainId: viewedId,
+  });
+  const knownFactories = useMemo(
+    () => history.map((h) => h.address.toLowerCase()),
+    [history]
+  );
+  const isVerified =
+    potFactory === undefined
+      ? undefined // still loading — do not accuse an honest pot
+      : knownFactories.includes((potFactory as string).toLowerCase());
 
   const { data: myCommitted } = useReadContract({
     address: pot,
@@ -510,6 +531,20 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
         <VisibilityBadge isPrivate={locked} />
       </p>
       <p className="font-mono text-xs text-gray-500 break-all">{pot}</p>
+      {/* A pot at an arbitrary address can be someone else's clone of our public
+          implementation. Say so before anyone commits, and name who actually
+          receives the money — release() pays `payee`, which the creator sets
+          independently of `organizer`. */}
+      {isVerified === false && (
+        <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm">
+          <p className="font-bold text-amber-900">⚠ Unverified contract</p>
+          <p className="mt-1 text-amber-900">
+            This address was not deployed by WeMadeIt&apos;s factory. It is a
+            different contract that copies the same code, and nothing here
+            protects your funds. Its creator chose who gets paid.
+          </p>
+        </div>
+      )}
       <p className="mt-1 text-sm">
         Status: <strong>{stateLabel}</strong>
         <LegitBadge
@@ -521,6 +556,16 @@ export default function PotPage({ params }: { params: Promise<{ address: string 
         <a href={explorer} target="_blank" className="underline">
           explorer
         </a>
+      </p>
+      <p className="mt-2 text-sm text-gray-600">
+        Pays:{" "}
+        <span className="font-mono text-xs break-all">{payee}</span>
+        {isOrganizer ? " (you)" : ""}
+        {isVerified === true && (
+          <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+            ✓ factory-deployed
+          </span>
+        )}
       </p>
 
       {/* Progress */}

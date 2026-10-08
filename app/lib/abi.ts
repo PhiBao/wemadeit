@@ -170,6 +170,13 @@ export const potAbi = [
   },
   {
     type: "function",
+    name: "factory",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
     name: "payee",
     stateMutability: "view",
     inputs: [],

@@ -9,7 +9,7 @@ Per the Metropolis rules, this project was built with AI coding assistants
 (OpenCode / opencode, powered by Claude and GPT-family models) for scaffolding,
 refactors, and documentation. The smart contracts were written and reviewed by
 the team; that review is our own — **no third-party audit has been performed**.
-What we can substantiate: 16 Foundry tests covering the state machine, privacy,
+What we can substantiate: 18 Foundry tests covering the state machine, privacy,
 fee invariants, and both refund paths; Sourcify `exact_match` verification
 against the deployed bytecode on both chains; no external calls in the release or
 refund paths beyond ERC-20 transfers and a static factory read.
@@ -92,12 +92,15 @@ pots never listed; titles stay public onchain, joining requires the key).
 
 State machine: `commit()` → full? `release()` (permissionless, pays organizer) :
 deadline passes? `expire()` → `refund()` (pull pattern, per contributor).
-**Visibility:** public pots join via `commit()`; invite-only pots enforce
-`commitWithSecret()` — the secret lives in the share-link `#fragment` (never
-sent to servers), the chain stores only its hash; organizers can rotate it via
-`rotateSecret()`. Verified on testnet: open commit reverts (`PrivateUseSecret`),
-keyed commit lands.
-Security properties — the first four are covered by `forge test` (**16/16
+**Visibility:** public pots join via `commit()`; invite-only pots gate on
+`commitWithSecret()`, where the join key lives in the share-link `#fragment` so
+it never reaches a server. **The key is not secret from the chain, though** — it
+is passed as calldata, so the first keyed commit publishes it onchain forever.
+Invite-only means "you need the link to find it", not "nobody else can join once
+someone has". Organizers can invalidate a leaked key with `rotateSecret()`, and
+remaining seats are exclusive only until the key is first spent. Verified on
+testnet: open commit reverts (`PrivateUseSecret`), keyed commit lands.
+Security properties — the first four are covered by `forge test` (**18/18
 green**): one commit per address; organizer cannot touch funds pre-tilt; **fee
 (1%, capped 5%) is read from the factory onchain — callers cannot waive it**;
 ReentrancyGuard + checks-effects throughout. Also enforced onchain: pot titles
@@ -209,10 +212,34 @@ implementation doesn't meet, we left it out. Earning it would mean deriving non-
 material from the PRF — e.g. a shared secret that encrypts invite secrets client-side
 before they ever reach a URL fragment.
 
+## Security
+
+**[Security review →](docs/SECURITY-REVIEW.md)** — three methodologies
+(Pashov `solidity-auditor`, Cloudflare `security-audit`,
+`vulnerability-research`) plus adversarial verification of every finding.
+
+**No Critical or High theft path found.** An unprivileged actor cannot take
+custody, double-refund, double-commit, re-initialise a clone, or mint value from
+a pot. The risk profile is custody liveness and documentation accuracy.
+
+Findings worth knowing, all with fixes or mitigations documented:
+a full pot whose payee cannot receive leaves contributions locked (no rescue
+path exists); anyone can deploy a look-alike clone of the public implementation,
+so the app now verifies `factory()` and warns on unverified addresses; the AI
+routes are unauthenticated and rate-limit-free; the keyed RPC endpoint is
+necessarily public in the client bundle.
+
+Fixed during the review: the app now shows **who gets paid before anyone
+commits** and warns on unverified contracts; a README claim about the invite key
+was corrected (the first keyed commit publishes it onchain — invite-only gates
+discovery, not entry after that); and an indexer bug that mis-marked refunds.
+
+**This review is our own. There has been no third-party audit.**
+
 ## Run locally
 
 ```bash
-cd contracts && forge test                      # 16/16
+cd contracts && forge test                      # 18/18
 cd app && pnpm install && pnpm dev              # needs env below
 cd app && pnpm typecheck && pnpm lint && pnpm test   # CI checks
 ```

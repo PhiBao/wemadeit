@@ -1,7 +1,10 @@
 "use client";
 
-// Private-pot invite secrets. The secret lives only in the share-link
-// #fragment (never sent to any server); the chain stores just its hash.
+// Private-pot invite secrets. The key travels in the share-link #fragment, so it
+// never reaches a server in transit and the chain stores its hash in state.
+// It is NOT confidential from the chain once used: the preimage is passed as
+// calldata to commitWithSecret(), so the first keyed commit publishes it
+// permanently. Invite-only gates discovery, not entry after that point.
 
 import { keccak256 } from "viem";
 

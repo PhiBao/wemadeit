@@ -18,7 +18,7 @@ type Pot @entity {
 }
 
 type Commitment @entity {
-  id: ID! # "{chainId}-{pot}-{user}-{index}"
+  id: ID! # "{chainId}-{pot}-{user}" — one commitment per address is a contract invariant
   pot: Pot!
   user: String!
   index: BigInt!
