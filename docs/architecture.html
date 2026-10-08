@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeMadeIt architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f6f4ec;
+      --color-ink:     #101418;
+      --color-muted:   #6b7671;
+      --color-accent:  #2f6b4f;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', Georgia, serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+    .note { font-size: 0.85rem; color: var(--color-muted); margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Diagram Design</p>
+    <h1>WeMadeIt architecture</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 660" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc">
+        <title id="arch-title">WeMadeIt architecture</title>
+        <desc id="arch-desc">A Next.js app, Monad chain contracts, and an Envio index: users sign in and commit through the app, pots hold funds onchain, and the index serves the public feed.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6b7671"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2f6b4f"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f6f4ec"/>
+
+        <!-- zones (bg → zones → arrows → nodes) -->
+        <rect x="24" y="96" width="272" height="408" rx="8" fill="rgba(16,20,24,0.02)" stroke="rgba(16,20,24,0.10)" stroke-width="0.8"/>
+        <rect x="124" y="100" width="72" height="12" rx="2" fill="#f6f4ec"/>
+        <text x="160" y="109" fill="rgba(16,20,24,0.40)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">APP</text>
+        <rect x="320" y="96" width="280" height="408" rx="8" fill="rgba(16,20,24,0.02)" stroke="rgba(16,20,24,0.10)" stroke-width="0.8"/>
+        <rect x="412" y="100" width="136" height="12" rx="2" fill="#f6f4ec"/>
+        <text x="480" y="109" fill="rgba(16,20,24,0.40)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">MONAD 143 + 10143</text>
+        <rect x="624" y="96" width="312" height="408" rx="8" fill="rgba(16,20,24,0.02)" stroke="rgba(16,20,24,0.10)" stroke-width="0.8"/>
+        <rect x="744" y="100" width="92" height="12" rx="2" fill="#f6f4ec"/>
+        <text x="790" y="109" fill="rgba(16,20,24,0.40)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">ENVIO CLOUD</text>
+
+        <!-- arrows -->
+        <line x1="160" y1="192" x2="160" y2="224" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="168" y="201" width="64" height="14" fill="#f6f4ec"/>
+        <text x="200" y="211" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">SIGNS IN</text>
+
+        <line x1="160" y1="288" x2="160" y2="320" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="168" y="297" width="44" height="14" fill="#f6f4ec"/>
+        <text x="190" y="307" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">DRAFT</text>
+
+        <path d="M272,256 H304 Q312,256 312,248 V168 Q312,160 320,160 H344" fill="none" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="277" y="201" width="70" height="14" fill="#f6f4ec"/>
+        <text x="312" y="211" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">TRANSACT</text>
+
+        <line x1="460" y1="192" x2="460" y2="224" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="468" y="201" width="52" height="14" fill="#f6f4ec"/>
+        <text x="494" y="211" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">CLONES</text>
+
+        <line x1="460" y1="288" x2="460" y2="320" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="468" y="297" width="44" height="14" fill="#f6f4ec"/>
+        <text x="490" y="307" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">LOCKS</text>
+
+        <path d="M576,160 H604 Q612,160 612,168 V224 Q612,232 620,232 H648" fill="none" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="579" y="189" width="66" height="14" fill="#f6f4ec"/>
+        <text x="612" y="199" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">POTCREATED</text>
+
+        <path d="M576,272 H604 Q612,272 612,264 H648" fill="none" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="584" y="244" width="56" height="14" fill="#f6f4ec"/>
+        <text x="612" y="254" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">EVENTS</text>
+
+        <path d="M780,272 V492 Q780,500 772,500 H168 Q160,500 160,492 V480" fill="none" stroke="#2f6b4f" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+        <rect x="788" y="375" width="62" height="14" fill="#f6f4ec"/>
+        <text x="819" y="385" fill="#2f6b4f" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">GRAPHQL</text>
+
+        <path d="M272,448 H280 Q288,448 288,440 V288 Q288,280 280,280 H272" fill="none" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="292" y="357" width="44" height="14" fill="#f6f4ec"/>
+        <text x="314" y="367" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle">FEED</text>
+
+        <!-- nodes: APP -->
+        <g>
+          <rect x="48" y="128" width="224" height="64" fill="#f6f4ec"/>
+          <rect x="48" y="128" width="224" height="64" rx="6" fill="#ffffff" stroke="rgba(16,20,24,0.16)" stroke-width="1"/>
+          <rect x="60" y="138" width="44" height="16" rx="2" fill="rgba(16,20,24,0.06)"/>
+          <text x="82" y="150" fill="#6b7671" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">AUTH</text>
+          <text x="60" y="172" fill="#101418" font-size="15" font-weight="600" font-family="'Geist', system-ui, sans-serif">Sign in</text>
+          <text x="60" y="186" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace">Mera · Dynamic · injected</text>
+        </g>
+        <g>
+          <rect x="48" y="224" width="224" height="64" fill="#f6f4ec"/>
+          <rect x="48" y="224" width="224" height="64" rx="6" fill="#ffffff" stroke="rgba(16,20,24,0.16)" stroke-width="1"/>
+          <rect x="60" y="234" width="36" height="16" rx="2" fill="rgba(16,20,24,0.06)"/>
+          <text x="78" y="246" fill="#6b7671" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">APP</text>
+          <text x="60" y="268" fill="#101418" font-size="15" font-weight="600" font-family="'Geist', system-ui, sans-serif">App UI</text>
+          <text x="60" y="282" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace">pot pages + feed</text>
+        </g>
+        <g>
+          <rect x="48" y="320" width="224" height="64" fill="#f6f4ec"/>
+          <rect x="48" y="320" width="224" height="64" rx="6" fill="#ffffff" stroke="rgba(16,20,24,0.16)" stroke-width="1"/>
+          <rect x="60" y="330" width="32" height="16" rx="2" fill="rgba(16,20,24,0.06)"/>
+          <text x="76" y="342" fill="#6b7671" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+          <text x="60" y="364" fill="#101418" font-size="15" font-weight="600" font-family="'Geist', system-ui, sans-serif">Assist API</text>
+          <text x="60" y="378" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace">parse + score</text>
+        </g>
+        <g>
+          <rect x="48" y="416" width="224" height="64" fill="#f6f4ec"/>
+          <rect x="48" y="416" width="224" height="64" rx="6" fill="#ffffff" stroke="rgba(16,20,24,0.16)" stroke-width="1"/>
+          <rect x="60" y="426" width="40" height="16" rx="2" fill="rgba(16,20,24,0.06)"/>
+          <text x="80" y="438" fill="#6b7671" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">DATA</text>
+          <text x="60" y="460" fill="#101418" font-size="15" font-weight="600" font-family="'Geist', system-ui, sans-serif">Feed reader</text>
+          <text x="60" y="474" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace">GraphQL first</text>
+        </g>
+
+        <!-- nodes: CHAIN -->
+        <g>
+          <rect x="344" y="128" width="232" height="64" fill="#f6f4ec"/>
+          <rect x="344" y="128" width="232" height="64" rx="6" fill="#ffffff" stroke="rgba(16,20,24,0.16)" stroke-width="1"/>
+          <rect x="356" y="138" width="48" height="16" rx="2" fill="rgba(16,20,24,0.06)"/>
+          <text x="380" y="150" fill="#6b7671" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">CHAIN</text>
+          <text x="356" y="172" fill="#101418" font-size="15" font-weight="600" font-family="'Geist', system-ui, sans-serif">PactFactory</text>
+          <text x="356" y="186" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace">EIP-1167 · 1% fee</text>
+        </g>
+        <g>
+          <rect x="344" y="224" width="232" height="64" fill="#f6f4ec"/>
+          <rect x="344" y="224" width="232" height="64" rx="6" fill="rgba(47,107,79,0.08)" stroke="#2f6b4f" stroke-width="1.5"/>
+          <rect x="356" y="234" width="48" height="16" rx="2" fill="#2f6b4f"/>
+          <text x="380" y="246" fill="#ffffff" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">CHAIN</text>
+          <text x="356" y="268" fill="#101418" font-size="15" font-weight="600" font-family="'Geist', system-ui, sans-serif">PactPot</text>
+          <text x="356" y="282" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace">commit · release · refund</text>
+        </g>
+        <g>
+          <rect x="344" y="320" width="232" height="64" fill="#f6f4ec"/>
+          <rect x="344" y="320" width="232" height="64" rx="6" fill="#ffffff" stroke="rgba(16,20,24,0.16)" stroke-width="1"/>
+          <rect x="356" y="330" width="48" height="16" rx="2" fill="rgba(16,20,24,0.06)"/>
+          <text x="380" y="342" fill="#6b7671" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">ASSET</text>
+          <text x="356" y="364" fill="#101418" font-size="15" font-weight="600" font-family="'Geist', system-ui, sans-serif">Assets</text>
+          <text x="356" y="378" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace">AUSD · MON</text>
+        </g>
+
+        <!-- nodes: INDEX -->
+        <g>
+          <rect x="648" y="208" width="264" height="64" fill="#f6f4ec"/>
+          <rect x="648" y="208" width="264" height="64" rx="6" fill="#ffffff" stroke="rgba(16,20,24,0.16)" stroke-width="1"/>
+          <rect x="660" y="218" width="48" height="16" rx="2" fill="rgba(16,20,24,0.06)"/>
+          <text x="684" y="230" fill="#6b7671" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">INDEX</text>
+          <text x="660" y="252" fill="#101418" font-size="15" font-weight="600" font-family="'Geist', system-ui, sans-serif">HyperIndex</text>
+          <text x="660" y="266" fill="#6b7671" font-size="10" font-family="'Geist Mono', monospace">PotCreated ×3 shapes</text>
+        </g>
+
+        <!-- legend -->
+        <g>
+          <rect x="48" y="576" width="150" height="40" rx="6" fill="#ffffff" stroke="rgba(16,20,24,0.16)" stroke-width="1"/>
+          <text x="64" y="600" fill="#101418" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif">Node</text>
+          <rect x="344" y="576" width="150" height="40" rx="6" fill="rgba(47,107,79,0.08)" stroke="#2f6b4f" stroke-width="1.5"/>
+          <text x="360" y="600" fill="#101418" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif">Focal: escrow</text>
+          <line x1="640" y1="596" x2="700" y2="596" stroke="#6b7671" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <text x="708" y="600" fill="#6b7671" font-size="12" font-family="'Geist', system-ui, sans-serif">call</text>
+          <line x1="780" y1="596" x2="840" y2="596" stroke="#2f6b4f" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+          <text x="848" y="600" fill="#6b7671" font-size="12" font-family="'Geist', system-ui, sans-serif">HTTP</text>
+        </g>
+      </svg>
+    </div>
+    <p class="note">Fidelity: the two assist routes (parse + score) are one node, AUSD + MON are one node, and the index + its GraphQL endpoint are one node. Source: README architecture section.</p>
+  </div>
+</body>
+</html>

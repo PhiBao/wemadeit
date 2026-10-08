@@ -78,47 +78,10 @@ volatility from the conversation.
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    subgraph Client["app/ — Next.js 16 PWA (pnpm, TypeScript, viem/wagmi)"]
-        UI["pot pages + feed\n(titles, progress, badges)"]
-        AUTH["auth: Mera passkey\n+ Dynamic embedded wallets\n+ injected fallback"]
-        ASSIST["✨ draft-my-pot box"]
-        ENVIO_LIB["lib/envio.ts\n(GraphQL first, RPC fallback)"]
-    end
-
-    subgraph Server["Next.js route handlers (server-only keys)"]
-        PARSE["POST /api/assist/parse\nJev Choice: occasion/currency/deadline"]
-        SCORE["POST /api/assist/score\nJev Noul: legitimacy badge"]
-    end
-
-    subgraph Chain["Monad 143 + 10143"]
-        FACTORY["PactFactory\nEIP-1167 clones · 1% fee (capped 5%)"]
-        POT["PactPot × N\ncommit / commitWithSecret\nrelease · expire · refund\nrotateSecret"]
-        AUSD["AUSD (6-decimal pots)"]
-        MON["MON (native pots)"]
-    end
-
-    subgraph Index["Envio HyperIndex (Cloud)"]
-        IDX["factories v1→v6 · dynamic clone registration\nPotCreated ×3 shapes · commits/tilts/refunds"]
-        GQL[("GraphQL")]
-    end
-
-    ASSIST --> PARSE
-    UI --> SCORE
-    AUTH -->|Face ID / email / wallet| UI
-    UI -->|create · commit · release · refund| FACTORY
-    FACTORY -->|clone| POT
-    POT -->|locks| AUSD
-    POT -->|locks| MON
-    FACTORY -->|PotCreated| IDX
-    POT -->|pot events| IDX
-    IDX --> GQL
-    GQL -->|public feed| ENVIO_LIB
-    ENVIO_LIB --> UI
-    UI -->|fallback: direct RPC reads| FACTORY
-    UI -->|fallback: direct RPC reads| POT
-```
+**[Architecture diagram →](docs/architecture.html)** — App (sign-in, UI, assist API,
+feed reader) · Monad 143 + 10143 (PactFactory → PactPot clones holding AUSD/MON)
+· Envio HyperIndex (dynamic clone registration, one GraphQL query for the feed).
+Open the HTML file in a browser for the full labeled diagram.
 
 ## Contracts (Sourcify `exact_match`, both chains)
 
