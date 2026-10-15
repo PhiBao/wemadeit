@@ -29,8 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      PRIMARY: https://indexer.dev.hyperindex.xyz/c1d7788/v1/graphql
-      SECONDARY: https://indexer.dev.hyperindex.xyz/1f35c19/v1/graphql
+      # PRIMARY is the deployment the app currently points at.
+      PRIMARY: https://indexer.dev.hyperindex.xyz/4b2e225/v1/graphql
+      # SECONDARY is kept warm as a fallback if PRIMARY is shut down.
+      # (1f35c19 is abandoned: it was deployed with a stale start_block and
+      #  would need ~10 days to backfill, so it is not worth keeping alive.)
+      SECONDARY: https://indexer.dev.hyperindex.xyz/c1d7788/v1/graphql
     steps:
       - name: Query both deployments
         run: |
