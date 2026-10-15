@@ -2,15 +2,20 @@ name: Keep Envio indexer alive
 
 # Envio Cloud shuts a deployment down after 7 days with no API requests
 # received. It counts requests to the GraphQL endpoint, NOT onchain activity —
-# so indexing a new pot does not register, and a quiet week with no site
-# visits can shut the index down mid-judging. This workflow makes a real
-# query every 6 hours, giving ~28x margin against the 7-day window.
+# so indexing a new pot does not register, and a quiet week with no site visits
+# can shut the index down mid-judging. This workflow makes a real query every
+# 6 hours, giving ~28x margin against the 7-day window.
 #
 # A 200 is not enough on its own: we ask for rows, so a deployment that is up
-# but empty/stale still fails loudly (GitHub emails the repo owner on a failed
-# scheduled run).
+# but empty or reset still fails loudly (GitHub emails the repo owner on a
+# failed scheduled run).
 #
-# On indexer redeploy, update ENVIO_URL below to the new deployment id.
+# PRIMARY is the deployment the app currently points at; a failure there fails
+# the run. SECONDARY is kept warm so it is ready as a fallback and so we learn
+# about problems before we depend on it. Update both when the app switches.
+#
+# Redeploying the indexer? The start_block in indexer/config.yaml must be
+# re-pinned near head first, or the fresh deployment spends days backfilling.
 
 on:
   schedule:
@@ -24,29 +29,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      ENVIO_URL: https://indexer.dev.hyperindex.xyz/c1d7788/v1/graphql
+      PRIMARY: https://indexer.dev.hyperindex.xyz/c1d7788/v1/graphql
+      SECONDARY: https://indexer.dev.hyperindex.xyz/1f35c19/v1/graphql
     steps:
-      - name: Query the indexer
+      - name: Query both deployments
         run: |
-          set -euo pipefail
-          response=$(curl -sS --max-time 45 --retry 3 --retry-delay 5 \
-            -X POST "$ENVIO_URL" \
-            -H 'content-type: application/json' \
-            -d '{"query":"{Pot(limit:1){address state}}"}')
+          set -uo pipefail
 
-          echo "response: $response"
+          check() {
+            local label="$1" url="$2" required="$3"
+            local response rows
+            response=$(curl -sS --max-time 45 --retry 3 --retry-delay 5 \
+              -X POST "$url" -H 'content-type: application/json' \
+              -d '{"query":"{Pot(limit:1){address state}}"}' 2>&1) || true
 
-          if echo "$response" | grep -q '"errors"'; then
-            echo "::error::Indexer returned GraphQL errors — the deployment may be down."
-            exit 1
-          fi
+            if echo "$response" | grep -q '"errors"'; then
+              echo "$label: GraphQL errors — $response"
+              [ "$required" = "true" ] && return 1 || return 0
+            fi
 
-          rows=$(echo "$response" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("data",{}).get("Pot") or []))')
-          echo "Pot rows returned: $rows"
+            rows=$(echo "$response" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("data",{}).get("Pot") or []))' 2>/dev/null || echo 0)
+            echo "$label: reachable, $rows pot row(s)"
 
-          if [ "$rows" -lt 1 ]; then
-            echo "::error::Indexer is reachable but returned no rows. It may have been reset."
-            exit 1
-          fi
+            if [ "$rows" -lt 1 ]; then
+              if [ "$required" = "true" ]; then
+                echo "::error::$label is the active index but returned no rows — the feed has lost its Envio source."
+                return 1
+              fi
+              echo "::warning::$label returned no rows (expected until it is seeded with a post-deploy pot)."
+            fi
+            return 0
+          }
 
-          echo "Indexer healthy."
+          failed=0
+          check "PRIMARY"   "$PRIMARY"   true  || failed=1
+          check "SECONDARY" "$SECONDARY" false || echo "::warning::SECONDARY unreachable."
+
+          exit "$failed"
